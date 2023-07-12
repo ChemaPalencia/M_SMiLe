@@ -1776,7 +1776,7 @@ if __name__ == "__main__":
                     computes the probability of magnification in a given
                     range.''',
                     prog='M-SMiLe.py',
-                    epilog = 'Contact: palencia@ifca.unican.es')
+                    epilog = 'Contact: palencia@ifca.unican.es / jpalenciasainz@gmail.com')
     
     # Mandatory parameters    
     parser.add_argument('mu_t', metavar='mu_t', type=float,
@@ -1877,7 +1877,7 @@ optional arguments:
   --save save           If "True", save the pdf in a file.
   --extension extension If save, extension in which the data is saved (txt, fits, h5).
 
-Contact: palencia@ifca.unican.es
+Contact: palencia@ifca.unican.es / jpalenciasainz@gmail.com
 
 """
 

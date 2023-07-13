@@ -113,7 +113,10 @@ microlens.save_data(extension='fits')
 microlens.plot(save_pic=True)
 ```
 # Output examples
-!https://github.com/ChemaPalencia/M_SMiLe/main/Image_examples/Pos_parity_Low_sigma.pdf
+[Neg_parity_High_sigma.pdf](https://github.com/ChemaPalencia/M_SMiLe/files/12039962/Neg_parity_High_sigma.pdf)
+[Neg_parity_Low_sigma.pdf](https://github.com/ChemaPalencia/M_SMiLe/files/12039963/Neg_parity_Low_sigma.pdf)
+[Pos_parity_High_sigma.pdf](https://github.com/ChemaPalencia/M_SMiLe/files/12039964/Pos_parity_High_sigma.pdf)
+[Pos_parity_Low_sigma.pdf](https://github.com/ChemaPalencia/M_SMiLe/files/12039965/Pos_parity_Low_sigma.pdf)
 
 # License
 

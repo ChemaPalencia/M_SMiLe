@@ -88,14 +88,19 @@ Any python program can import the class microlenses from `M_SMiLe.py`.
 Once we have imported the class we can create and instance of an object and call its methods to save the data in different files, generate plots, or directly get **numpy** arrays with the value of the magnification probability.
 
 ```python
+# Import the microlenses class from M_SMiLe.py
 from M_SMiLe import microlenses
 
+# Create an object of the class microlenses with the desired inputs
 microlens = microlenses(mu_t=200, mu_r=4, sigma_star=12.4, zs=1.3, zd=0.7, mu1=1e-3, mu2=1e5)
 
+# Get magnification probability per logaritmic bin
 pdf, log_mu = microlens.get_pdf()
 
+# Save data in a file (h5, txt, fits). Can choose another path.
 microlens.save_data(extension='fits')
 
+# Save a plot.
 microlens.plot(save_pic=True)
 ```
 
@@ -107,5 +112,5 @@ This project is licensed under the **MIT License**. Feel free to use and modify 
 
 If you have any questions or inquiries regarding this code or its usage, please contact palencia@ifca.unican.es or jpalenciasainz@gmail.com
 
-We hope this code proves to be useful in your research and exploration of microlensing probability within galaxy clusters. Happy computing!
+We hope this code proves to be useful in your research and exploration of magnification probability of high redshift stars by galaxy clusters. Happy computing!
 

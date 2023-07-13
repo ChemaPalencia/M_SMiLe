@@ -22,6 +22,11 @@ $\mu_1$: Lower limit to compute the mgnification probability.
 
 $\mu_2$: Upper limit to compute the magnification probability.
 
+# Outputs
+The magnification probability values at different magnification bins are saved to a file of the desired extension, as a two-column csv .txt file, as a fits table, or as an hdf5 group with two data sets.
+
+In addition, users have the option to generate a plot of the magnification probability curves saved as a .pdf file.
+
 # Installation
 To use this code you need Python. This code has been written and tested with Python 3.9 but older versions should work.
 
@@ -38,6 +43,10 @@ $ cd M_SMiLe
 4. Install the required dependencies. It is recommended to set up a virtual environment before installing the dependencies to avoid conflicts with other Python packages:
 ```
 $ pip install -r requirements.txt
+```
+or
+```
+$ !conda install --file requierements.txt
 ```
 
 # Usage

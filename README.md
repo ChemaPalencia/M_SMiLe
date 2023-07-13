@@ -112,6 +112,8 @@ microlens.save_data(extension='fits')
 # Save a plot.
 microlens.plot(save_pic=True)
 ```
+# Output examples
+!https://github.com/ChemaPalencia/M_SMiLe/main/Image_examples/Pos_parity_Low_sigma.pdf
 
 # License
 

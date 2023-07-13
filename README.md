@@ -23,7 +23,7 @@ $\mu_1$: Lower limit to compute the mgnification probability.
 $\mu_2$: Upper limit to compute the magnification probability.
 
 # Outputs
-The magnification probability values at different magnification bins are saved to a file of the desired extension, as a two-column csv .txt file, as a fits table, or as an hdf5 group with two data sets.
+The magnification probability values at different magnification bins are saved to a file of the desired extension, as a two-column .txt file, as a fits table, or as an hdf5 group with two data sets.
 
 In addition, users have the option to generate a plot of the magnification probability curves saved as a .pdf file.
 

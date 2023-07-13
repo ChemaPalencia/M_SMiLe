@@ -1712,8 +1712,8 @@ class microlenses(object):
             if save_pic:
                 if path is None:
                     path = os.getcwd() + '/'
-                    plt.savefig(f'magnification_pdf.pdf',
-                                dpi=300)
+                plt.savefig(path+f'magnification_pdf.pdf',
+                            dpi=300)
             
             # Displays the image.
             plt.show()        
@@ -1851,7 +1851,7 @@ if __name__ == "__main__":
     
     # Saves and shows the pdf plot.
     if args.plot:
-        microlens.plot()
+        microlens.plot(microlens.plot(save_pic=True, path=dir_))
     
 # Help provided for terminal access.    
 """

@@ -18,7 +18,7 @@ $\mu_{\rm t}$: Tangential macro-magnification of the strongly lensed images of t
 
 $\Sigma_{\ast}$: Surface mass density of microlenses. The product with $\left|\mu_{\rm t}\right|$ gives the effective surface mass density, $\Sigma_{\rm eff}$, that determines the model used to compute the magnification probability.
 
-$\mu_1$: Lower limit to compute the mgnification probability.
+$\mu_1$: Lower limit to compute the magnification probability.
 
 $\mu_2$: Upper limit to compute the magnification probability.
 

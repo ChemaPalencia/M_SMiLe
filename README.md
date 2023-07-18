@@ -1,4 +1,4 @@
-# M_SMiLe
+# Magnification Statistics of Micro-Lensing (M_SMiLe)
 This repository contains code that computes an approximation of the probability of magnification for a lens system consisting of microlensing by compact objects within a galaxy cluster.
 The code specifically focuses on the scenario where the galaxy cluster is strongly lensing a background galaxy, and the compact objects, such as stars, are sensitive to this microlensing effect.
 The microlenses responsible for this effect are stars and stellar remnants, but also exotic objects such as compact dark matter candidates (PBHs, axion mini-halos...) can contribute to this effect.

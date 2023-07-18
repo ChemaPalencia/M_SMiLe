@@ -46,7 +46,7 @@ $ pip install -r requirements.txt
 ```
 or
 ```
-$ !conda install --file requierements.txt
+$ !conda install --file requirements.txt
 ```
 
 # Usage

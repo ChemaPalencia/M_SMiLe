@@ -112,6 +112,8 @@ microlens.save_data(extension='fits')
 # Save a plot.
 microlens.plot(save_pic=True)
 ```
+A detailed example of some of the capabilities of the code is shown in the script example.py.
+
 # Output examples
 [Neg_parity_High_sigma.pdf](https://github.com/ChemaPalencia/M_SMiLe/files/12039962/Neg_parity_High_sigma.pdf)
 

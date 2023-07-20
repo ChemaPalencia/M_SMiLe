@@ -127,19 +127,26 @@ This project is licensed under the **MIT License**. Feel free to use and modify 
 
 # Citation
 
-If you use the M_SMiLe code, please cite it as
+If you use the M_SMiLe code, please cite its release paper [Statistics of magnification for extremely lensed high redshift stars](https://arxiv.org/abs/2307.09505) as
 ```
-???
+Palencia, J. M., Diego, J. M., Kavanagh, B. J., & Martinez, J. 2023, arXiv eprints, arXiv:2307.09505. https://arxiv.org/abs/2307.09505
 ```
-along with its release paper [Statistics of magnification for extremely lensed high redshift stars](https://arxiv.org/abs/2307.09505)
+The corresponding bibtex is:
 ```
-@misc{palencia2023statistics,
-      title={Statistics of magnification for extremely lensed high redshift stars}, 
-      author={J. M. Palencia and J. M. Diego and B. J. Kavanagh and J. Martinez},
-      year={2023},
-      eprint={2307.09505},
-      archivePrefix={arXiv},
-      primaryClass={astro-ph.CO}
+@ARTICLE{2023arXiv230709505P,
+       author = {{Palencia}, J.~M. and {Diego}, J.~M. and {Kavanagh}, B.~J. and {Martinez}, J.},
+        title = "{Statistics of magnification for extremely lensed high redshift stars}",
+      journal = {arXiv e-prints},
+     keywords = {Astrophysics - Cosmology and Nongalactic Astrophysics, Astrophysics - Astrophysics of Galaxies, High Energy Physics - Phenomenology},
+         year = 2023,
+        month = jul,
+          eid = {arXiv:2307.09505},
+        pages = {arXiv:2307.09505},
+archivePrefix = {arXiv},
+       eprint = {2307.09505},
+ primaryClass = {astro-ph.CO},
+       adsurl = {https://ui.adsabs.harvard.edu/abs/2023arXiv230709505P},
+      adsnote = {Provided by the SAO/NASA Astrophysics Data System}
 }
 ```
 

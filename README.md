@@ -112,7 +112,7 @@ microlens.save_data(extension='fits')
 # Save a plot.
 microlens.plot(save_pic=True)
 ```
-A detailed example of some of the capabilities of the code is shown in the script example.py.
+A detailed example of some of the capabilities of the code is shown in the script ```example.py```.
 
 # Output examples
 [Neg_parity_High_sigma.pdf](https://github.com/ChemaPalencia/M_SMiLe/files/12039962/Neg_parity_High_sigma.pdf)
@@ -129,7 +129,7 @@ This project is licensed under the **MIT License**. Feel free to use and modify 
 
 # Citation
 
-If you use the M_SMiLe code, please cite its release paper [Statistics of magnification for extremely lensed high redshift stars](https://arxiv.org/abs/2307.09505) as
+If you use the M_SMiLe code, please tell us and cite its release paper [Statistics of magnification for extremely lensed high redshift stars](https://arxiv.org/abs/2307.09505) as
 ```
 Palencia, J. M., Diego, J. M., Kavanagh, B. J., & Martinez, J. 2023, arXiv eprints, arXiv:2307.09505. https://arxiv.org/abs/2307.09505
 ```

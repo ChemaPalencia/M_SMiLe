@@ -3,7 +3,7 @@ This repository contains code that computes an approximation of the probability 
 The code specifically focuses on the scenario where the galaxy cluster is strongly lensing a background galaxy, and the compact objects, such as stars, are sensitive to this microlensing effect.
 The microlenses responsible for this effect are stars and stellar remnants, but also exotic objects such as compact dark matter candidates (PBHs, axion mini-halos...) can contribute to this effect.
 
-More information about this code can be obtained from the paper: URL
+More information about this code can be obtained from the paper: [Statistics of magnification for extremely lensed high redshift stars](https://arxiv.org/abs/2307.09505)
 
 # Input parameters
 This code generates the magnification probability for a system with the desired input parameters, these are:
@@ -124,6 +124,24 @@ microlens.plot(save_pic=True)
 # License
 
 This project is licensed under the **MIT License**. Feel free to use and modify the code according to the terms specified in the license.
+
+# Citation
+
+If you use the M_SMiLe code, please cite it as
+```
+???
+```
+along with its release paper [Statistics of magnification for extremely lensed high redshift stars](https://arxiv.org/abs/2307.09505)
+```
+@misc{palencia2023statistics,
+      title={Statistics of magnification for extremely lensed high redshift stars}, 
+      author={J. M. Palencia and J. M. Diego and B. J. Kavanagh and J. Martinez},
+      year={2023},
+      eprint={2307.09505},
+      archivePrefix={arXiv},
+      primaryClass={astro-ph.CO}
+}
+```
 
 # Contact
 

@@ -89,7 +89,7 @@ class microlenses(object):
         assert sigma_star > 0, 'No microlenses. Sigma_star must be greater than 0!'
 
         # Input parameters
-        self.mu_t = mu_t
+        self.mu_t = 5*mu_t
         self.mu_r = mu_r
         self.sigma_star = sigma_star # M_sun/pc2
         self.zs = zs
@@ -1875,7 +1875,7 @@ if __name__ == "__main__":
     assert mu1 >= 0, 'mu1 must be positive!'
     assert mu1 < mu2, 'mu1 must be lower than mu2!'
     assert zs > zd, 'zd redshift can not be larger than zs!'
-    assert abs(mu_t) >= 10*mu_r, 'tangential arcs have mu_t >> mu_r!'
+    assert abs(mu_t) >= 5*mu_r, 'tangential arcs have mu_t >> mu_r!'
     assert sigma_star > 0, 'No microlenses. Sigma_star must be greater than 0!'
     assert mu_r >= 0, 'mu_r must be positive!'
 

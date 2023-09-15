@@ -214,6 +214,7 @@ class microlenses(object):
             Surface mass density for the source-lens plane setting.
 
         """
+        self.angular_diameter_distances()
         # Assuming a flat LCMD cosmology we get Sigma_crit
         self.sigma_crit = (0.35*u.g * u.cm**-2 \
                     * (self.D.to(u.Gpc)/u.Gpc)**-1).to(u.M_sun/u.pc**2).value

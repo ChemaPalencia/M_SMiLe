@@ -89,7 +89,7 @@ class microlenses(object):
         assert sigma_star > 0, 'No microlenses. Sigma_star must be greater than 0!'
 
         # Input parameters
-        self.mu_t = 5*mu_t
+        self.mu_t = mu_t
         self.mu_r = mu_r
         self.sigma_star = sigma_star # M_sun/pc2
         self.zs = zs
@@ -1038,7 +1038,7 @@ class microlenses(object):
 
         # Compute necessary parameters from inputs
         self.mu_m = self.mu_t * self.mu_r
-        self.Nmu = int(1e5)
+        self.Nmu = int(5e4)
         # Mu for computing the whole pdf
         self.log_mu4pdf = np.log10(np.logspace(np.log10(1e-6),
                                                np.log10(5e6),
@@ -1152,7 +1152,7 @@ class microlenses(object):
                                  'exp2': 0, 'delta': 0.005}
 
                 pars_val_sigma_C = {'C': 0.3527344840835316}
-                pars_err_sigma_C = {'C': 0.009}
+                pars_err_sigma_C = {'Cmicrolens.mu_m = mu_t_ * mu_r_': 0.009}
 
 
                 model3_params = {'C' : self.brokenPowerlawSmooth(x,
@@ -1332,6 +1332,10 @@ class microlenses(object):
                                  'beta_b': self.curvature_pl(x,
                                                             **pars_val_beta_b)}
 
+                # if abs(self.mu_m) < 500:
+                model1_params['A_tilde'] = 0
+
+
                 if model1_params['beta_b'] <= 0.5:
                     model1_params['b'] = 0
                 else:
@@ -1421,6 +1425,9 @@ class microlenses(object):
                         pl2 = microlenses.powerlaw(x, b, 10**2.4, beta_b)
                         return pl1 + pl2
 
+                    if A == 0:
+                        return pls(x)
+
                     max_ = x[np.argmax(ln(x))]
                     epsilon = self.find_cut(ln, pls, max_-0.5, max_+0.5, -1)
 
@@ -1466,10 +1473,10 @@ class microlenses(object):
                 pars_err_beta_a = {'A': 0, 'a': 0.05, 'x0': 0}
 
                 model1_params = {'a': self.constant(x,
-                                           **pars_val_a)*np.heaviside(20-x, 0),
+                                           **pars_val_a)*np.heaviside(50-x, 0),
                                  'beta_a': self.powerlaw(x,
                                                 **pars_val_beta_a)\
-                                           *np.heaviside(20-x, 0)}
+                                           *np.heaviside(50-x, 0)}
 
                 pars_val_A = {'A': 0.4850714, 'break1': 1.71558,
                               'break2': 7.94933, 'exp1': 0.46677,
@@ -1618,10 +1625,12 @@ class microlenses(object):
                                 extra = 250
                             else:
                                 extra = 0
+                            if self.model_params[0]['sigma_B']<0.2:
+                                extra = 1000
                             arg_peak = np.argmax(curve_1)
-                            dif = np.abs(np.log10(curve_1[np.argmax(curve_1)+extra:]) \
-                                      -np.log10(curve_2[np.argmax(curve_1)+extra:]))
-                            arg_min = np.argmin(dif) + arg_peak
+                            dif = np.abs(np.log10(curve_1[arg_peak+extra:]) \
+                                      -np.log10(curve_2[arg_peak+extra:]))
+                            arg_min = np.argmin(dif) + arg_peak + extra
 
                             limits[i] = arg_min
 
@@ -1631,6 +1640,7 @@ class microlenses(object):
                         else: # Low sigma_eff
                             arg_max = np.nanargmax(curves['curve_2'])
                             if i == 0:
+                                # Left
                                 if self.sigma_ratio >= 0.09:
                                     extra = 500
                                 else:
@@ -1644,9 +1654,24 @@ class microlenses(object):
 
                                     arg_min = np.nanargmin(dif) + arg_min+100
                             else:
-                                dif = np.abs(np.log10(curve_1[arg_max+extra//2:])\
-                                             -np.log10(curve_2[arg_max+extra//2:]))
-                                arg_min = np.nanargmin(dif) + arg_max
+                                extra = 500
+                                if self.model_params[-1]['sigma_C']>0.25:
+                                    extra *= 2
+                                elif self.model_params[-1]['sigma_C']<0.21:
+                                    extra=extra//2
+                                # Right
+                                dif = np.abs(np.log10(curve_1[arg_max+extra:])\
+                                              -np.log10(curve_2[arg_max+extra:]))
+
+                                minima = dif[np.r_[True, dif[1:] < dif[:-1]] & np.r_[dif[:-1] < dif[1:], True]]
+
+                                # arg_min = np.nanargmin(dif) + arg_max + (extra)//2
+                                if len(minima) == 1:
+                                    arg_min = np.where(dif== minima)
+                                else:
+                                    arg_min = np.where(dif== minima[0])
+
+                                arg_min += arg_max + extra
 
                             limits[i] = arg_min
 
@@ -1939,4 +1964,5 @@ microlens.plot(save_pic=True)
 pdf, log_mu = microlens.get_pdf()
 
 """
+
 

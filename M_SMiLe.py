@@ -50,12 +50,15 @@ from scipy.special import erf
 from astropy.table import Table
 import matplotlib.pyplot as plt
 from astropy import constants as c
+from scipy.signal import find_peaks
+from scipy.optimize import minimize
 from scipy.signal import savgol_filter
 from astropy.cosmology import z_at_value
 from astropy.cosmology import FlatLambdaCDM
-from matplotlib.ticker import MultipleLocator,FormatStrFormatter,MaxNLocator
+from matplotlib.ticker import MultipleLocator, FormatStrFormatter, MaxNLocator
 
 warnings.filterwarnings("ignore")
+
 
 class microlenses(object):
     def __init__(self, mu_t, mu_r, sigma_star, zs, zd, mu1=1, mu2=2.5e5):
@@ -91,7 +94,7 @@ class microlenses(object):
         # Input parameters
         self.mu_t = mu_t
         self.mu_r = mu_r
-        self.sigma_star = sigma_star # M_sun/pc2
+        self.sigma_star = sigma_star  # M_sun/pc2
         self.zs = zs
         self.zd = zd
         self.mu1 = mu1
@@ -101,6 +104,7 @@ class microlenses(object):
     @property
     def mu_t(self):
         return self._mu_t
+
     @mu_t.setter
     def mu_t(self, new_value):
         self._mu_t = new_value
@@ -108,6 +112,7 @@ class microlenses(object):
     @property
     def mu_r(self):
         return self._mu_r
+
     @mu_r.setter
     def mu_r(self, new_value):
         self._mu_r = new_value
@@ -115,6 +120,7 @@ class microlenses(object):
     @property
     def sigma_star(self):
         return self._sigma_star
+
     @sigma_star.setter
     def sigma_star(self, new_value):
         self._sigma_star = new_value
@@ -122,6 +128,7 @@ class microlenses(object):
     @property
     def zs(self):
         return self._zs
+
     @zs.setter
     def zs(self, new_value):
         self._zs = new_value
@@ -129,6 +136,7 @@ class microlenses(object):
     @property
     def zd(self):
         return self._zd
+
     @zd.setter
     def zd(self, new_value):
         self._zd = new_value
@@ -136,6 +144,7 @@ class microlenses(object):
     @property
     def mu1(self):
         return self._mu1
+
     @mu1.setter
     def mu1(self, new_value):
         self._mu1 = new_value
@@ -143,9 +152,28 @@ class microlenses(object):
     @property
     def mu2(self):
         return self._mu2
+
     @mu2.setter
     def mu2(self, new_value):
         self._mu2 = new_value
+
+    @property
+    def sigma_eff(self):
+        return abs(self._sigma_star * self._mu_t)
+
+    @property
+    def mu_m(self):
+        return self._mu_r * self._mu_t
+
+    @property
+    def sigma_crit(self):
+        self.angular_diameter_distances()
+        return (0.35*u.g * u.cm**-2
+                           * (self.D.to(u.Gpc)/u.Gpc)**-1).to(u.M_sun/u.pc**2).value
+
+    @property
+    def sigma_ratio(self):
+        return self.sigma_eff / self.sigma_crit
     ###########################################################################
 
     def __str__(self):
@@ -158,16 +186,13 @@ class microlenses(object):
             Object user firendly description.
 
         """
-        self.mu_m = self.mu_r*self.mu_t
-        self.critical_surface_density()
-        self.sigma_effective()
 
         text = f'Lens system consisting on microlenses within a galaxy ' \
-             + f' cluster at zd = {self.zd}, with a macro-magnification' \
-             + f' mu_m = {self.mu_m}, and soruce plane at zs = {self.zs}.' \
-             + f' The effective surface mass density is sigma_eff =' \
-             + f' {self.sigma_eff:.0f} Msun/pc2, and the critical surface' \
-             + f' mass density is sigma_crit = {self.sigma_crit:.0f} Msun/pc2.'
+            + f' cluster at zd = {self.zd}, with a macro-magnification' \
+            + f' mu_m = {self.mu_m}, and soruce plane at zs = {self.zs}.' \
+            + f' The effective surface mass density is sigma_eff =' \
+            + f' {self.sigma_eff:.0f} Msun/pc2, and the critical surface' \
+            + f' mass density is sigma_crit = {self.sigma_crit:.0f} Msun/pc2.'
         return textwrap.indent("\n".join(textwrap.wrap(text, 80)), '         ')
 
     def __repr__(self):
@@ -201,36 +226,9 @@ class microlenses(object):
         # Angular diameter distances. Used for getting Sigma_crit
         self.D_d = cosmo.angular_diameter_distance(z=self.zd)
         self.D_s = cosmo.angular_diameter_distance(z=self.zs)
-        self.D_ds = cosmo.angular_diameter_distance_z1z2(z1=self.zd,z2=self.zs)
+        self.D_ds = cosmo.angular_diameter_distance_z1z2(
+            z1=self.zd, z2=self.zs)
         self.D = self.D_ds * self.D_d / self.D_s
-
-    def critical_surface_density(self):
-        """
-        Sets critical surface mass density.
-
-        Sets
-        -------
-        float
-            Surface mass density for the source-lens plane setting.
-
-        """
-        self.angular_diameter_distances()
-        # Assuming a flat LCMD cosmology we get Sigma_crit
-        self.sigma_crit = (0.35*u.g * u.cm**-2 \
-                    * (self.D.to(u.Gpc)/u.Gpc)**-1).to(u.M_sun/u.pc**2).value
-
-    def sigma_effective(self):
-        """
-        Sets the effective surface mass density.
-
-        Sets
-        -------
-        float
-            Effective durface mass density. Product of mu_t and sigma_star.
-
-        """
-        # Sigma_eff given by the input parameters Sigma_star * |mu_t|
-        self.sigma_eff = abs(self.mu_t) * self.sigma_star
 
     # Get parity-mass regime
     def return_regime(self):
@@ -335,8 +333,10 @@ class microlenses(object):
         alpha_b : float
                   Skewness oflognormal 2.
         """
-        ln_a = microlenses.lognormal(x, A=A, mu=mu_a, sigma=sigma_a, alpha=alpha_a)
-        ln_b = microlenses.lognormal(x, A=B, mu=mu_b, sigma=sigma_b, alpha=alpha_b)
+        ln_a = microlenses.lognormal(
+            x, A=A, mu=mu_a, sigma=sigma_a, alpha=alpha_a)
+        ln_b = microlenses.lognormal(
+            x, A=B, mu=mu_b, sigma=sigma_b, alpha=alpha_b)
 
         return ln_a + ln_b
 
@@ -366,24 +366,66 @@ class microlenses(object):
             Constant value at low x
         """
         def left(x, A, break1, break2, exp1, exp2, exp3,
-                                      delta, C):
+                 delta, C):
             return np.minimum(np.full_like(x, C), microlenses.powerlaw(x, A, 1, exp1))
+
         def right(x, A, break1, break2, exp1, exp2, exp3,
-                                      delta, C):
+                  delta, C):
             exp2 *= -1
             exp3 *= -1
             return (x/break2)**(-exp2) \
-                 * (0.5*(1+(x/break2)**(1/delta)))**((exp2-exp3)*delta)
+                * (0.5*(1+(x/break2)**(1/delta)))**((exp2-exp3)*delta)
 
         tot = np.heaviside(80-x, 1)*(left(x, A, break1, break2, exp1, exp2, exp3,
-                                          delta, C)*np.heaviside(break1-x, 1) \
-            + right(x, A, break1, break2, exp1, exp2, exp3,
-                    delta, C)*np.heaviside(-break1+x, 0) \
-                    /right(break1, A, break1, break2, exp1, exp2, exp3,
-                    delta, C)*left(break1, A, break1, break2, exp1, exp2, exp3,
-                    delta, C))
+                                          delta, C)*np.heaviside(break1-x, 1)
+                                     + right(x, A, break1, break2, exp1, exp2, exp3,
+                                             delta, C)*np.heaviside(-break1+x, 0)
+                                     / right(break1, A, break1, break2, exp1, exp2, exp3,
+                                             delta, C)*left(break1, A, break1, break2, exp1, exp2, exp3,
+                                                            delta, C))
 
         return tot + np.heaviside(x-80, 0)*np.full_like(x, 0)
+
+    @staticmethod
+    def powerlaw2BbrokenPowerlawSmooth2(x, A, break1, break2, exp1, exp2, exp3,
+                                        delta, **kwargs):
+        """
+        Powerlaw transition to a smooth broken powerlaw
+        ----------
+        x : float
+            Independent variable.
+        A : float
+            Amplitude.
+        break1 : float
+            Transition from powerlaw to smooth broken powerlaw.
+        break2 : float
+            Break in smooth broken powerlaw.
+        exp1 : float
+            Exponent powerlaw1.
+        exp2 : float
+            Exponent 1 smooth broken powerlaw.
+        exp3 : float
+            Exponent 2 smooth broken powerlaw.
+        delta : float
+            Smoothness of change parameter.
+        """
+
+        def right(x, A, break1, break2, exp1, exp2, exp3,
+                  delta):
+            return microlenses.brokenPowerlawSmooth(x, A, break2, exp2, exp3,
+                                                    delta)
+
+        def left(x, A, break1, break2, exp1, exp2, exp3,
+                 delta):
+            return microlenses.powerlaw(x, right(1, A, break1, break2, exp1,
+                                                 exp2, exp3, delta), 1, exp1)
+
+        tot = left(x, A, break1, break2, exp1, exp2, exp3, delta) \
+            * np.heaviside(break1-x, 1) + right(x, A, break1, break2, exp1,
+                                                exp2, exp3, delta) \
+            * np.heaviside(-break1+x, 0)
+
+        return tot
 
     @staticmethod
     def threeSmoothPowerlawAndLognormal(x, A, exp1, exp2, exp3, break1, break2,
@@ -431,8 +473,8 @@ class microlenses(object):
         ln = microlenses.lognormal(x, A, mu, sigma, alpha)
 
         r = A * (x/break1)**(-exp1) \
-               * (0.5*(1+(x/break1)**(1/delta1)))**((exp1-exp2)*delta1) \
-               * (0.5*(1+(x/break2)**(1/delta2)))**((exp2-exp3)*delta2) + ln
+            * (0.5*(1+(x/break1)**(1/delta1)))**((exp1-exp2)*delta1) \
+            * (0.5*(1+(x/break2)**(1/delta2)))**((exp2-exp3)*delta2) + ln
 
         return np.minimum(np.full_like(x, C), r)
 
@@ -467,15 +509,16 @@ class microlenses(object):
 
         def left(x, A, break1, break2, exp1, exp2, exp3, delta):
             return x**exp1
+
         def right(x, A, break1, break2, exp1, exp2, exp3, delta):
             exp2 *= -1
             exp3 *= -1
             return A*(x/break2)**(-exp2) \
-                 * (0.5*(1+(x/break2)**(1/delta)))**((exp2-exp3)*delta)
+                * (0.5*(1+(x/break2)**(1/delta)))**((exp2-exp3)*delta)
 
         return right(x, **pars)*np.heaviside(-break1+x, 1) \
-             + left(x, **pars)*np.heaviside(break1-x, 1)\
-             / left(break1, **pars)*right(break1, **pars)
+            + left(x, **pars)*np.heaviside(break1-x, 1)\
+            / left(break1, **pars)*right(break1, **pars)
 
     @staticmethod
     def brokenPowerlawSmooth(x, A, break_, exp1, exp2, delta, **kwargs):
@@ -501,7 +544,7 @@ class microlenses(object):
         exp2 *= -1
 
         return A*(x/break_)**(-exp1) \
-             * (0.5*(1+(x/break_)**(1/delta)))**((exp1-exp2)*delta)
+            * (0.5*(1+(x/break_)**(1/delta)))**((exp1-exp2)*delta)
 
     @staticmethod
     def twoBrokenPowerlaw(x, A, exp1, exp2, break_, **kwargs):
@@ -524,6 +567,7 @@ class microlenses(object):
 
         def pl1(x):
             return microlenses.powerlaw(x, A, 1, exp1, **kwargs)
+
         def pl2(x):
             return microlenses.powerlaw(x, pl1(break_), break_, exp2, **kwargs)
 
@@ -557,20 +601,22 @@ class microlenses(object):
         """
         def ln(x):
             return microlenses.lognormal(x, A, mu, sigma, 0, **kwargs)
+
         def pl(x):
             return microlenses.powerlaw(x, 1, 1, exp, **kwargs)
 
         def left(x):
             return (A - ln(x))
+
         def right(x):
             return pl(x)
 
         return left(x)*np.heaviside(-x+break_, 0) \
-              + right(x)*np.heaviside(-break_+x, 1)/right(break_)*left(break_)
+            + right(x)*np.heaviside(-break_+x, 1)/right(break_)*left(break_)
 
     @staticmethod
     def powerlaw23BbrokenPowerlawSmooth(x, A, break0, break1, break2, break3, exp0, exp1, exp2,
-                                           exp3, exp4, delta1, delta2, **kwargs):
+                                        exp3, exp4, delta1, delta2, **kwargs):
         """
         Broken powerlaw transitiond to a 3 smooth broken powerlaw
 
@@ -610,20 +656,21 @@ class microlenses(object):
         def left(x, A, break0, break1, break2, break3, exp0, exp1, exp2, exp3,
                  exp4, delta1, delta2):
             return microlenses.powerlaw(x, A, 1, exp0)*np.heaviside(break0-x, 1) + \
-                   microlenses.powerlaw(x, microlenses.powerlaw(break0, A, 1, exp0), 1, exp1) \
-                 * np.heaviside(x-break0, 0)
+                microlenses.powerlaw(x, microlenses.powerlaw(break0, A, 1, exp0), 1, exp1) \
+                * np.heaviside(x-break0, 0)
         def right(x, A, break0, break1, break2, break3, exp0, exp1, exp2, exp3,
                   exp4, delta1, delta2):
             exp2 *= -1
             exp3 *= -1
             exp4 *= -1
             return (x/break2)**(-exp2) \
-                 * (0.5*(1+(x/break2)**(1/delta1)))**((exp2-exp3)*delta1)\
-                 * (0.5*(1+(x/break3)**(1/delta2)))**((exp3-exp4)*delta2)
+                * (0.5*(1+(x/break2)**(1/delta1)))**((exp2-exp3)*delta1)\
+                * (0.5*(1+(x/break3)**(1/delta2)))**((exp3-exp4)*delta2)
 
         return left(x, **pars)*np.heaviside(break1-x, 1) \
-             + right(x, **pars)*np.heaviside(-break1+x, 0) \
-             / right(break1, **pars)*left(break1, **pars)
+            + right(x, **pars)*np.heaviside(-break1+x, 0) \
+            / right(break1, **pars)*left(break1, **pars)
+
     @staticmethod
     def threeBrokenPowerlaw(x, A, exp1, exp2, exp3, break1, break2, **kwargs):
         """
@@ -648,15 +695,19 @@ class microlenses(object):
         """
         def pl1(x):
             return microlenses.powerlaw(x, A, 1, exp1, **kwargs)
+
         def pl2(x):
             return microlenses.powerlaw(x, pl1(break1), break1, exp2, **kwargs)
+
         def pl3(x):
             return microlenses.powerlaw(x, pl2(break2), break2, exp3, **kwargs)
 
         def left(x):
             return pl1(x) * np.heaviside(-x+break1, 0)
+
         def center(x):
             return np.heaviside(-break1+x, 1)*pl2(x)*np.heaviside(-x+break2, 1)
+
         def right(x):
             return np.heaviside(-break2+x, 0)*pl3(x)
 
@@ -684,10 +735,12 @@ class microlenses(object):
         """
         def constant_gaussian1(x):
             return A - microlenses.lognormal(x, A, mu, sigma1, 0, **kwargs)
+
         def constant_gaussian2(x):
             return B - microlenses.lognormal(x, B, mu, sigma2, 0, **kwargs)
         return constant_gaussian1(x) * np.heaviside(mu-x, 0) \
-             + constant_gaussian2(x) * np.heaviside(x-mu, 0) \
+            + constant_gaussian2(x) * np.heaviside(x-mu, 0) \
+
 
     @staticmethod
     def brokenPowerlawSmooth2constant(x, A, break_, exp1, exp2, delta, C,
@@ -714,7 +767,7 @@ class microlenses(object):
         """
         exp1 *= -1
         exp2 *= -1
-        pl =  A*(x/break_)**(-exp1) \
+        pl = A*(x/break_)**(-exp1) \
             * (0.5*(1+(x/break_)**(1/delta)))**((exp1-exp2)*delta)
 
         c = np.full_like(x, C)
@@ -753,19 +806,25 @@ class microlenses(object):
 
         def pl0(x):
             return microlenses.powerlaw(x, A, 1, exp0, **kwargs) + C
+
         def pl1(x):
             return microlenses.powerlaw(x, pl0(break0), break0, exp1, **kwargs)
+
         def pl2(x):
             return microlenses.powerlaw(x, pl1(break1), break1, exp2, **kwargs)
+
         def pl3(x):
             return microlenses.powerlaw(x, pl2(break2), break2, exp3, **kwargs)
 
         def leftmost(x):
             return pl0(x) * np.heaviside(-x+break0, 1)
+
         def left(x):
             return np.heaviside(-break0+x, 0) * pl1(x) * np.heaviside(-x+break1, 0)
+
         def center(x):
             return np.heaviside(-break1+x, 1) * pl2(x) * np.heaviside(-x+break2, 1)
+
         def right(x):
             return np.heaviside(-break2+x, 0) * pl3(x)
 
@@ -807,20 +866,24 @@ class microlenses(object):
 
         def pl1(x):
             return powerlaw(x, A, 1, exp1)
+
         def pl2(x):
             return powerlaw(x, pl1(break1), break1, exp2)
+
         def pl3(x):
             return powerlaw(x, pl2(break2), break2, exp3)
 
         def left(x):
             return pl1(x) * np.heaviside(-x+break1, 0)
+
         def center(x):
             return np.heaviside(-break1+x, 1) * pl2(x) * np.heaviside(-x+break2, 1)
+
         def right(x):
             return np.heaviside(-break2+x, 0) * pl3(x)
 
-        return np.minimum(np.full_like(x, C), left(x) + center(x) + right(x) + \
-             + B*np.exp(-(np.log10(x)-np.log10(mu))**2/(2*sigma**2)))
+        return np.minimum(np.full_like(x, C), left(x) + center(x) + right(x) +
+                          + B*np.exp(-(np.log10(x)-np.log10(mu))**2/(2*sigma**2)))
 
     @staticmethod
     def lognormal2powerlaw(x, A, mu, sigma, B, b, **kwargs):
@@ -898,13 +961,13 @@ class microlenses(object):
         """
         exp1 *= -1
         exp2 *= -1
-        left =  A*(x/break1)**(-exp1) \
-              * (0.5*(1+(x/break1)**(1/delta1)))**((exp1-exp2)*delta1)
+        left = A*(x/break1)**(-exp1) \
+            * (0.5*(1+(x/break1)**(1/delta1)))**((exp1-exp2)*delta1)
 
         exp3 *= -1
         exp4 *= -1
-        right =  B*(x/break2)**(-exp3) \
-              * (0.5*(1+(x/break2)**(1/delta2)))**((exp3-exp4)*delta2) + C
+        right = B*(x/break2)**(-exp3) \
+            * (0.5*(1+(x/break2)**(1/delta2)))**((exp3-exp4)*delta2) + C
 
         return np.minimum(left, right)
 
@@ -932,7 +995,7 @@ class microlenses(object):
 
     @staticmethod
     def threeSmoothPowerlaw(x, A, exp1, exp2, exp3, break1, break2, delta1,
-                          delta2, **kwargs):
+                            delta2, **kwargs):
         """
         3 smooth broken powerlaws
 
@@ -961,8 +1024,8 @@ class microlenses(object):
         exp2 *= -1
         exp3 *= -1
         return A*(x/break1)**(-exp1) \
-             * (0.5*(1+(x/break1)**(1/delta1)))**((exp1-exp2)*delta1) \
-             * (0.5*(1+(x/break2)**(1/delta2)))**((exp2-exp3)*delta2)
+            * (0.5*(1+(x/break1)**(1/delta1)))**((exp1-exp2)*delta1) \
+            * (0.5*(1+(x/break2)**(1/delta2)))**((exp2-exp3)*delta2)
 
     # This method is used to model part of some pdfs
     # (Finds the intersection between two curves)
@@ -1037,7 +1100,6 @@ class microlenses(object):
         """
 
         # Compute necessary parameters from inputs
-        self.mu_m = self.mu_t * self.mu_r
         self.Nmu = int(5e4)
         # Mu for computing the whole pdf
         self.log_mu4pdf = np.log10(np.logspace(np.log10(1e-6),
@@ -1047,21 +1109,15 @@ class microlenses(object):
                                                dtype=np.double, axis=0))
         # Limits where log_mu4pdf ~= log10(mu1) and log10(mu2) values to return
         self.limits_logmu = [np.argmin(abs(10**self.log_mu4pdf-self.mu1*abs(1e3/self.mu_m))),
-                             np.argmin(abs(10**self.log_mu4pdf \
-                                           -self.mu2*abs(1e3/self.mu_m)))]
+                             np.argmin(abs(10**self.log_mu4pdf
+                                           - self.mu2*abs(1e3/self.mu_m)))]
 
-        self.log_mu4pdf = self.log_mu4pdf[self.limits_logmu[0]: self.limits_logmu[1]]
+        self.log_mu4pdf = self.log_mu4pdf[self.limits_logmu[0]
+            : self.limits_logmu[1]]
 
         # Values unnormalized
         self.log_mu = self.log_mu4pdf + np.log10(abs(self.mu_m)/1000)
         self.mu = 10**self.log_mu
-
-        # Computed from input parameters
-        self.angular_diameter_distances()
-        self.critical_surface_density()
-        self.sigma_effective()
-
-        self.sigma_ratio = self.sigma_eff / self.sigma_crit
 
         # Get mass regime for obtaining the correct modeling of the pdf
         self.return_regime()
@@ -1071,7 +1127,7 @@ class microlenses(object):
         self.model_params = None
 
         # Based on the parity and mass regime a modeling is assigned to the object
-        x = self.sigma_ratio # Variable to get the value of the params at.
+        x = self.sigma_ratio  # Variable to get the value of the params at.
 
         # Model params obtained from the scalings based on sigma_ratio
         # Parameter are drawn from dictionaries with name as keys and value
@@ -1103,20 +1159,20 @@ class microlenses(object):
                 pars_val_alpha_B = {'A': 5.5380, 'x0': 1, 'a': 0.47461554}
                 pars_err_alpha_B = {'A': 0.602, 'x0': 0, 'a': 0.07}
 
-                model1_params = {'A' : self.powerlaw(x,
-                                            **pars_val_A)*np.heaviside(0.1-x, 0),
-                                 'mu_A' : self.powerlaw(x,
-                                               **pars_val_mu_A),
-                                 'sigma_A' : self.powerlaw(x,
-                                                  **pars_val_sigma_A),
-                                 'B' : self.powerlaw(x,
-                                            **pars_val_B),
-                                 'mu_B' : self.brokenPowerlawSmooth(x,
-                                               **pars_val_mu_B),
-                                 'sigma_B' : self.powerlaw(x,
-                                                  **pars_val_sigma_B),
-                                 'alpha_B' : self.powerlaw(x,
-                                                  **pars_val_alpha_B)}
+                model1_params = {'A': self.powerlaw(x,
+                                                    **pars_val_A),  # *np.heaviside(0.1-x, 0),
+                                 'mu_A': self.powerlaw(x,
+                                                       **pars_val_mu_A),
+                                 'sigma_A': self.powerlaw(x,
+                                                          **pars_val_sigma_A),
+                                 'B': self.powerlaw(x,
+                                                    **pars_val_B),
+                                 'mu_B': self.brokenPowerlawSmooth(x,
+                                                                   **pars_val_mu_B),
+                                 'sigma_B': self.powerlaw(x,
+                                                          **pars_val_sigma_B),
+                                 'alpha_B': self.powerlaw(x,
+                                                          **pars_val_alpha_B)}
 
                 pars_val_a = {'A': 0.3051608026, 'x0': 1, 'a': 0.8398767}
                 pars_err_a = {'A': 0.04, 'x0': 0, 'a': 0.05}
@@ -1129,17 +1185,17 @@ class microlenses(object):
                                    'delta': 0.3}
 
                 model2_params = {'a': self.powerlaw(x,
-                                            **pars_val_a),
+                                                    **pars_val_a),
                                  'beta_b': -self.brokenPowerlawSmooth(x,
-                                               **pars_val_beta_b),
+                                                                      **pars_val_beta_b),
                                  'beta_a': -2,
                                  'b': 0}
 
                 if model2_params['beta_b'] >= -2:
                     model2_params['b'] = 0
                 else:
-                    model2_params['b'] =  model2_params['a'] / 591 \
-                                        * np.sqrt(self.sigma_eff)
+                    model2_params['b'] = model2_params['a'] / 591 \
+                        * np.sqrt(self.sigma_eff)
 
                 pars_val_C = {'A': 0.0842881609, 'break_': 0.114330,
                               'exp1': 1.52000, 'exp2': 0.322239, 'delta': 0.25}
@@ -1154,16 +1210,15 @@ class microlenses(object):
                 pars_val_sigma_C = {'C': 0.3527344840835316}
                 pars_err_sigma_C = {'Cmicrolens.mu_m = mu_t_ * mu_r_': 0.009}
 
-
-                model3_params = {'C' : self.brokenPowerlawSmooth(x,
-                                            **pars_val_C),
-                                 'mu_C' : self.brokenPowerlawSmooth(x,
-                                               **pars_val_mu_C),
-                                 'sigma_C' : self.constant(x,
-                                                  **pars_val_sigma_C)}
-
+                model3_params = {'C': self.brokenPowerlawSmooth(x,
+                                                                **pars_val_C),
+                                 'mu_C': self.brokenPowerlawSmooth(x,
+                                                                   **pars_val_mu_C),
+                                 'sigma_C': self.constant(x,
+                                                          **pars_val_sigma_C)}
 
                 # Model functions
+
                 def model1(x, A, mu_A, sigma_A, B, mu_B, sigma_B, alpha_B,
                            **kwargs):
                     ln_a = microlenses.lognormal(x, A, mu_A, sigma_A, 0)
@@ -1217,11 +1272,14 @@ class microlenses(object):
                                     'break2': 6, 'exp0': 0.02, 'exp1': 0.007,
                                     'exp2': 0.08, 'exp3': 0, 'C': 0}
 
-                pars_val_alpha_A = {'A': 0.10170829, 'break_': 3.8652296,
-                                    'exp1': -0.1793595, 'exp2': -11.856396,
-                                    'delta': 0.3616786}
-                pars_err_alpha_A = {'A': 0.11, 'break_': 0.6, 'exp1':  0.12,
-                                    'exp2':  4, 'delta': 0.08}
+                pars_val_alpha_A = {'A': 0.10170829,
+                                    'break1': 1,
+                                    'break2': 3.8652296,
+                                    'exp1': -0.633, 'exp2': -0.1793595,
+                                    'exp3': -11.856396, 'delta': 0.3616786}
+                pars_err_alpha_A = {'A': 0.11, 'break1': 0, 'break2': 0.6,
+                                    'exp1':  0.00, 'exp2': 0.12, 'exp3':  4,
+                                    'delta': 0.08}
 
                 pars_val_B = {'A': 1.1999999, 'mu': 0.5765915, 'sigma': 0.32205671,
                               'exp': 0.33, 'break_': 5.4}
@@ -1239,7 +1297,9 @@ class microlenses(object):
 
                 pars_val_sigma_B = {'A': 0.33199, 'break0': 1.2302728,
                                     'break1': 2.24730336, 'break2': 3.3912697,
-                                    'exp0': -0.214045378, 'exp1': -0.0883842,
+                                    # 'exp0': -0.214045378,
+                                    'exp0': -0.0344,
+                                    'exp1': -0.0883842,
                                     'exp2': -0.75870725, 'exp3': -0.13169, 'C': 0}
                 pars_err_sigma_B = {'A': 0.003, 'break0': 0.003, 'break1': 0.1,
                                     'break2': 0.2, 'exp0': 0.02, 'exp1': 0.04,
@@ -1251,27 +1311,35 @@ class microlenses(object):
                 pars_err_alpha_B = {'A': 0.09, 'B': 0.04, 'mu': 0.2,
                                     'sigma1': 0.02, 'sigma2': 0.03}
 
-                model1_params = {'A' : self.powerlaw2BbrokenPowerlawSmooth(x,
-                                            **pars_val_A),
-                                 'mu_A' : self.threeSmoothPowerlawAndLognormal(x,
-                                               **pars_val_mu_A),
-                                 'sigma_A' : self.fourBrokenPowerlaw(x,
-                                                  **pars_val_sigma_A),
-                                 'alpha_A' : self.brokenPowerlawSmooth(x,
-                                                  **pars_val_alpha_A),
-                                 'B' : self.constminusLognormal2Powerlaw(x,
-                                            **pars_val_B),
-                                 'mu_B' : self.powerlaw23BbrokenPowerlawSmooth(x,
-                                               **pars_val_mu_B),
-                                 'sigma_B' : self.fourBrokenPowerlaw(x,
-                                                  **pars_val_sigma_B),
-                                 'alpha_B' : self.twoConstMinusLognormal(x,
-                                                  **pars_val_alpha_B)}
+                model1_params = {'A': self.powerlaw2BbrokenPowerlawSmooth(x,
+                                                                          **pars_val_A)*np.heaviside(x-1, 0)
+                                 + self.powerlaw(x, 0.92, 1, -0.2578732355108736)*np.heaviside(1-x, 1),
+                                 'mu_A': self.threeSmoothPowerlawAndLognormal(x,
+                                                                              **pars_val_mu_A)*np.heaviside(x-1, 0)
+                                 + self.powerlaw(x, 416, 1, -0.37114263208463394)*np.heaviside(1-x, 1),
+                                 'sigma_A': self.fourBrokenPowerlaw(x,
+                                                                    **pars_val_sigma_A)*np.heaviside(x-1, 0)
+                                 + self.powerlaw(x, 0.3542, 1, -0.030036711843066652)*np.heaviside(1-x, 1),
+                                 'alpha_A': self.powerlaw2BbrokenPowerlawSmooth2(x,
+                                                                                 **pars_val_alpha_A)*np.heaviside(x-1, 0)
+                                 + self.powerlaw(x, 2.34, 1, -0.405799222724421)*np.heaviside(1-x, 1),
+                                 'B': self.constminusLognormal2Powerlaw(x,
+                                                                        **pars_val_B)*np.heaviside(x-1, 0)
+                                 + self.powerlaw(x, 0.28, 1, 4.81763707198723)*np.heaviside(1-x, 1),
+                                 'mu_B': self.powerlaw23BbrokenPowerlawSmooth(x,
+                                                                              **pars_val_mu_B)*np.heaviside(x-1, 0)
+                                 + self.powerlaw(x, 737, 1, -1.641389961757059)*np.heaviside(1-x, 1),
+                                 'sigma_B': self.fourBrokenPowerlaw(x,
+                                                                    **pars_val_sigma_B)*np.heaviside(x-1, 0)
+                                 + self.powerlaw(x, 0.3319, 1, 0.16036329929555113)*np.heaviside(1-x, 1),
+                                 'alpha_B': self.twoConstMinusLognormal(x,
+                                                                        **pars_val_alpha_B)*np.heaviside(x-1, 0)
+                                 + self.powerlaw(x, 2.31, 1, -0.4005601911082159)*np.heaviside(1-x, 1)}
                 self.model_params = [model1_params]
 
                 # Model functions
                 def model1(x, A, mu_A, sigma_A, alpha_A,
-                              B, mu_B, sigma_B, alpha_B, **kwargs):
+                           B, mu_B, sigma_B, alpha_B, **kwargs):
 
                     ln_a = microlenses.lognormal(x, A, mu_A, sigma_A, alpha_A)
                     ln_b = microlenses.lognormal(x, B, mu_B, sigma_B, alpha_B)
@@ -1295,7 +1363,7 @@ class microlenses(object):
 
                 pars_val_sigma_A4 = {'A': 0.1773112, 'delta': 0.60708,
                                      'break_': 0.063271881,
-                                    'exp1': 0.19562840, 'exp2': 0.08096189}
+                                     'exp1': 0.19562840, 'exp2': 0.08096189}
                 pars_err_sigma_A4 = {'A': 0.05, 'break_': 0.03,
                                      'exp1': 0.15, 'exp2': 0.12, 'delta': 2}
 
@@ -1316,31 +1384,30 @@ class microlenses(object):
                                    'val_cut': 0}
 
                 model1_params = {'A_tilde': self.brokenPowerlawSmooth(x,
-                                                           **pars_val_A_tilde),
+                                                                      **pars_val_A_tilde),
                                  'mu_A_tilde': self.powerlaw(self.mu_r,
-                                                       **pars_val_mu_A_tilde),
+                                                             **pars_val_mu_A_tilde),
                                  'sigma_A4': self.brokenPowerlawSmooth(x,
-                                                **pars_val_sigma_A4),
+                                                                       **pars_val_sigma_A4),
                                  'A': None,
                                  'mu_A': None,
                                  'sigma_A': None,
                                  'alpha_A': self.brokenPowerlawSmooth(x,
-                                                           **pars_val_alpha_A),
+                                                                      **pars_val_alpha_A),
                                  'a': self.powerlaw(x, **pars_val_a),
                                  'beta_a': 0.5,
                                  'b': 0,
                                  'beta_b': self.curvature_pl(x,
-                                                            **pars_val_beta_b)}
+                                                             **pars_val_beta_b)}
 
                 # if abs(self.mu_m) < 500:
                 model1_params['A_tilde'] = 0
 
-
                 if model1_params['beta_b'] <= 0.5:
                     model1_params['b'] = 0
                 else:
-                    model1_params['b'] =  model1_params['a'] * (self.sigma_eff \
-                                        / 1928)**1.7678
+                    model1_params['b'] = model1_params['a'] * (self.sigma_eff
+                                                               / 1928)**1.7678
 
                 def R_sigma4(mu_r):
                     return -0.57999*np.tanh((mu_r-2.8)*2.674)+1.5790
@@ -1354,13 +1421,16 @@ class microlenses(object):
                 model1_params['A'] = amp_true(model1_params['A_tilde'])
                 model1_params['mu_A'] = mu_true(model1_params['mu_A_tilde'])
                 model1_params['sigma_A'] = R_sigma4(self.mu_r) \
-                                               * model1_params['sigma_A4']
+                    * model1_params['sigma_A4']
 
                 pars_val_B = {'A': 0.2533466981, 'x0': 1, 'a': -1.019007532129}
                 pars_err_B = {'A': 0.03, 'x0': 0, 'a': 0.04}
 
+                # pars_val_mu_B = {'A': 1084.57652, 'break_': 0.20482544,
+                #                  'exp1': 0.0502976, 'exp2': -0.92344,
+                #                  'delta': 0.07821}
                 pars_val_mu_B = {'A': 1084.57652, 'break_': 0.20482544,
-                                 'exp1': 0.0502976, 'exp2': -0.92344,
+                                 'exp1': 0.0502976, 'exp2': -0.52344,
                                  'delta': 0.07821}
                 pars_err_mu_B = {'A': 80, 'break_': 0.03,
                                  'exp1': 0.04, 'exp2': 0.15,
@@ -1369,11 +1439,13 @@ class microlenses(object):
                 pars_val_sigma_B = {'A': 0.999999999, 'x0': 1, 'a': 0.99072515}
                 pars_err_sigma_B = {'A': 5e-7, 'x0': 1, 'a': 0.012}
 
-                model2_params = {'B' : self.powerlaw(x, **pars_val_B),
-                                 'mu_B' : self.brokenPowerlawSmooth(x,
-                                                              **pars_val_mu_B),
-                                 'sigma_B' : self.powerlaw(x,
-                                                           **pars_val_sigma_B)}
+                model2_params = {'B': self.powerlaw(x, **pars_val_B),
+                                 'mu_B': self.brokenPowerlawSmooth(x,
+                                                                   **pars_val_mu_B),
+                                 # 'mu_B': self.powerlaw(x, A=pars_val_mu_B['A'],
+                                 #                       exp1=pars_val_mu_B['exp1']),
+                                 'sigma_B': self.powerlaw(x,
+                                                          **pars_val_sigma_B)}
 
                 pars_val_d = {'A': 0.491805512267, 'x0': 1, 'a': 0.9768118836}
                 pars_err_d = {'A': 0.05, 'x0': 0, 'a': 0.04}
@@ -1394,23 +1466,24 @@ class microlenses(object):
                 pars_val_sigma_C = {'A': 0.332466, 'x0': 1, 'a': 0.2528516}
                 pars_err_sigma_C = {'A': 0.011, 'x0': 0, 'a': 0.013}
 
-                model3_params = {'c' : 0,
-                                 'beta_c' : -self.curvature_pl(x,
-                                                            **pars_val_beta_c),
-                                 'd' : self.powerlaw(x, **pars_val_d),
+                model3_params = {'c': 0,
+                                 'beta_c': -self.curvature_pl(x,
+                                                              **pars_val_beta_c),
+                                 'd': self.powerlaw(x, **pars_val_d),
                                  'beta_d': -2,
-                                 'C' : self.powerlaw(x, **pars_val_C),
-                                 'mu_C' : self.powerlaw(x, **pars_val_mu_C),
-                                 'sigma_C' : self.powerlaw(x,
-                                                           **pars_val_sigma_C)}
+                                 'C': self.powerlaw(x, **pars_val_C),
+                                 'mu_C': self.powerlaw(x, **pars_val_mu_C),
+                                 'sigma_C': self.powerlaw(x,
+                                                          **pars_val_sigma_C)}
 
                 if model3_params['beta_c'] >= -2:
                     model3_params['c'] = 0
                 else:
-                    model3_params['c'] = model3_params['d'] * (self.sigma_eff \
-                                       / 995)**2
+                    model3_params['c'] = model3_params['d'] * (self.sigma_eff
+                                                               / 995)**2
 
-                self.model_params = [model1_params, model2_params, model3_params]
+                self.model_params = [model1_params,
+                                     model2_params, model3_params]
 
                 # Model functions
                 def model1(x, A, mu_A, sigma_A, alpha_A, a, beta_a, b, beta_b,
@@ -1436,7 +1509,7 @@ class microlenses(object):
 
                     def left(x):
                         A = (ln(epsilon) + pls(epsilon)) \
-                          / ln(epsilon) * np.heaviside(-x+epsilon, 0)
+                            / ln(epsilon) * np.heaviside(-x+epsilon, 0)
                         return A * ln(x)
 
                     return right(x) + left(x)
@@ -1456,27 +1529,28 @@ class microlenses(object):
                         ln = microlenses.lognormal(x, C, mu_C, sigma_C, 0)
                         return ln
 
-                    cut = 10**(np.log10(mu_C) + (2*sigma_C*np.log(10))**2 \
+                    cut = 10**(np.log10(mu_C) + (2*sigma_C*np.log(10))**2
                                * np.log10(np.exp(1)))
 
                     return np.heaviside(cut-x, 1)*f1(x) \
-                         + np.heaviside(-cut+x, 1)*f2(x)/f2(mu_C)*f1(mu_C)
+                        + np.heaviside(-cut+x, 1)*f2(x)/f2(mu_C)*f1(mu_C)
 
                 self.models = [model1, model2, model3]
 
             elif self.mass_regime == 'high':
                 # Model parameters fit params and stderrs
-                pars_val_a = {'C':0.47538461541080634}
-                pars_err_a = {'C':0.002}
+                pars_val_a = {'C': 0.47538461541080634}
+                pars_err_a = {'C': 0.002}
 
-                pars_val_beta_a = {'A': 0.5, 'a': 0.7939284800501769, 'x0': 0.5}
+                pars_val_beta_a = {
+                    'A': 0.5, 'a': 0.7939284800501769, 'x0': 0.5}
                 pars_err_beta_a = {'A': 0, 'a': 0.05, 'x0': 0}
 
                 model1_params = {'a': self.constant(x,
-                                           **pars_val_a)*np.heaviside(50-x, 0),
+                                                    **pars_val_a)*np.heaviside(50-x, 0),
                                  'beta_a': self.powerlaw(x,
-                                                **pars_val_beta_a)\
-                                           *np.heaviside(50-x, 0)}
+                                                         **pars_val_beta_a)
+                                 * np.heaviside(50-x, 0)}
 
                 pars_val_A = {'A': 0.4850714, 'break1': 1.71558,
                               'break2': 7.94933, 'exp1': 0.46677,
@@ -1539,7 +1613,7 @@ class microlenses(object):
                 pars_err_C = {'B': 0.6, 'break2': 3, 'exp3': 2, 'exp4': 0.08,
                               'delta2': 0.07, 'C': 0.06, 'A': 0.07,
                               'break1': 0.7, 'exp1': 1.6, 'exp2': 0.018,
-                              'delta1':0.012 }
+                              'delta1': 0.012}
 
                 pars_val_mu_C = {'A': 2780.150065911462, 'break_': 11.00000157,
                                  'exp1': -0.2314221, 'exp2': -0.96796350862}
@@ -1552,24 +1626,32 @@ class microlenses(object):
                 pars_err_sigma_C = {'A': 0.0019, 'mu': 0.05, 'sigma': 0.009,
                                     'B': 0.004, 'b': 0.009}
 
-                model2_params = {'A' : self.threeSmoothPowerlaw(x,
-                                            **pars_val_A)*np.heaviside(15-x,0),
-                                 'mu_A' : self.fourBrokenPowerlaw(x,
-                                               **pars_val_mu_A),
-                                 'sigma_A' : self.brokenPowerlawSmooth(x,
-                                                  **pars_val_sigma_A),
-                                 'B' : self.lognormals(x,
-                                            **pars_val_B),
-                                 'mu_B' : self.fourBrokenPowerlaw(x,
-                                                 **pars_val_mu_B),
-                                 'sigma_B' : self.threeBrokenPowerlawlognormal(x,
-                                                  **pars_val_sigma_B),
-                                 'C' : self.twoBrokenPowerlawSmooth(x,
-                                            **pars_val_C)*np.heaviside(x-2.5,1),
-                                 'mu_C' : self.twoBrokenPowerlaw(x,
-                                                            **pars_val_mu_C),
-                                 'sigma_C' : self.lognormal2powerlaw(x,
-                                                  **pars_val_sigma_C),
+                model2_params = {'A': self.threeSmoothPowerlaw(x,
+                                                               **pars_val_A)*np.heaviside(15-x, 0)*np.heaviside(x-1, 0)
+                                 + self.powerlaw(x, 0.79, 1, 0.2391465751775469)*np.heaviside(1-x, 1),
+                                 'mu_A': self.fourBrokenPowerlaw(x,
+                                                                 **pars_val_mu_A)*np.heaviside(x-1, 0)
+                                 + self.powerlaw(x, 651, 1, -0.10902422577139648)*np.heaviside(1-x, 1),
+                                 'sigma_A': self.brokenPowerlawSmooth(x,
+                                                                      **pars_val_sigma_A)*np.heaviside(x-1, 0)
+                                 + self.powerlaw(x, 0.3692, 1, 0.0) *
+                                 np.heaviside(1-x, 1),
+                                 'B': self.lognormals(x,
+                                                      **pars_val_B)*np.heaviside(x-1, 0)
+                                 + self.powerlaw(x, 0.17, 1, 0.9215198558143352)*np.heaviside(1-x, 1),
+                                 'mu_B': self.fourBrokenPowerlaw(x,
+                                                                 **pars_val_mu_B)*np.heaviside(x-1, 0)
+                                 + self.powerlaw(x, 2452, 1, -0.6615682731747226)*np.heaviside(1-x, 1),
+                                 'sigma_B': self.threeBrokenPowerlawlognormal(x,
+                                                                              **pars_val_sigma_B)*np.heaviside(x-1, 0)
+                                 + self.powerlaw(x, 0.2728, 1, 0.0) *
+                                 np.heaviside(1-x, 1),
+                                 'C': self.twoBrokenPowerlawSmooth(x,
+                                                                   **pars_val_C)*np.heaviside(x-2.5, 1),
+                                 'mu_C': self.twoBrokenPowerlaw(x,
+                                                                **pars_val_mu_C),
+                                 'sigma_C': self.lognormal2powerlaw(x,
+                                                                    **pars_val_sigma_C),
                                  }
 
                 self.model_params = [model1_params, model2_params]
@@ -1596,116 +1678,160 @@ class microlenses(object):
                     self.models = [model2]
                     self.model_params = [model2_params]
 
-
         # Get a curve for each model and find the cuts between them
-        curves = {}
+        self.curves = {}
         for i, model in enumerate(self.models):
-            curves[f'curve_{i+1}'] = model(10**self.log_mu4pdf,
-                                           **self.model_params[i])
+            self.curves[f'curve_{i+1}'] = model(10**self.log_mu4pdf,
+                                                **self.model_params[i])
 
-        ncuts = len(self.models) -1
+        if self.mass_regime == 'low' and self.parity == 1:
+            y1 = self.curves['curve_1']
+            y2 = self.curves['curve_2']
+            y3 = self.curves['curve_3']
 
-        if ncuts == 0:
-            compound = curves['curve_1']
-        else:
+            # find first cut
+            max_y1_index = np.argmax(y1)
+            log_diff_right = np.abs(
+                np.log10(y1[max_y1_index:]) - np.log10(y2[max_y1_index:]))
 
-            limits = np.zeros(ncuts)
-            arg_mu = np.arange(len(self.log_mu4pdf))
+            # Find local index where differnce is minimum
+            min_log_diff_index_local = np.argmin(log_diff_right)
 
-            for i, ele in enumerate(self.models):
-                if i < len(self.models)-1:
-                    curve_1 = curves[f'curve_{i+1}']
-                    curve_2 = curves[f'curve_{i+2}']
-                    dif = abs(curve_1-curve_2)/np.minimum(curve_1, curve_2)
-                    arg_min = np.argmin(dif)
+            min_log_diff_index = max_y1_index + min_log_diff_index_local
 
-                    if self.parity == 1 and self.mass_regime == 'low':
-                        if i == 0:
-                            if self.sigma_ratio >= 0.09:
-                                extra = 250
-                            else:
-                                extra = 0
-                            if self.model_params[0]['sigma_B']<0.2:
-                                extra = 1000
-                            arg_peak = np.argmax(curve_1)
-                            dif = np.abs(np.log10(curve_1[arg_peak+extra:]) \
-                                      -np.log10(curve_2[arg_peak+extra:]))
-                            arg_min = np.argmin(dif) + arg_peak + extra
+            # Concatenate curves
+            compound1 = np.concatenate(
+                (y1[:min_log_diff_index], y2[min_log_diff_index:]))
 
-                            limits[i] = arg_min
+            # Difference
+            log_diff = np.abs(np.log10(y2)-np.log10(y3))/np.abs(np.log10(y2))
 
-                    if self.parity == -1:
-                        if ncuts == 1: # High sigma_eff
-                            limits[i] = arg_min
-                        else: # Low sigma_eff
-                            arg_max = np.nanargmax(curves['curve_2'])
-                            if i == 0:
-                                # Left
-                                if self.sigma_ratio >= 0.09:
-                                    extra = 500
-                                else:
-                                    extra = 0
-                                dif = np.abs(np.log10(curve_1[:arg_max-extra])\
-                                             -np.log10(curve_2[:arg_max-extra]))
-                                arg_min = np.nanargmin(dif)
-                                if self.log_mu4pdf[arg_min] <= np.log10(self.model_params[0]['mu_A']):
-                                    dif = np.abs(np.log10(curve_1[arg_min+100:arg_max-extra])\
-                                             -np.log10(curve_2[arg_min+100:arg_max-extra]))
+            # Minimum
+            min_indices, _ = find_peaks(-log_diff)
+            # print(min_indices)
 
-                                    arg_min = np.nanargmin(dif) + arg_min+100
-                            else:
-                                extra = 500
-                                if self.model_params[-1]['sigma_C']>0.25:
-                                    extra *= 2
-                                elif self.model_params[-1]['sigma_C']<0.21:
-                                    extra=extra//2
-                                # Right
-                                dif = np.abs(np.log10(curve_1[arg_max+extra:])\
-                                              -np.log10(curve_2[arg_max+extra:]))
+            min_diff_index = min_indices[-1]
 
-                                minima = dif[np.r_[True, dif[1:] < dif[:-1]] & np.r_[dif[:-1] < dif[1:], True]]
+            compound = np.concatenate(
+                (compound1[:min_diff_index], y3[min_diff_index:] /
+                 y3[min_diff_index]*y2[min_diff_index]))
 
-                                # arg_min = np.nanargmin(dif) + arg_max + (extra)//2
-                                if len(minima) == 1:
-                                    arg_min = np.where(dif== minima)
-                                else:
-                                    arg_min = np.where(dif== minima[0])
+        if self.mass_regime == 'low' and self.parity == -1:
+            y1 = self.curves['curve_1']
+            y2 = self.curves['curve_2']
+            y3 = self.curves['curve_3']
 
-                                arg_min += arg_max + extra
+            index_log_non_zero = np.where(y2 > 1e-8)[0][0]
 
-                            limits[i] = arg_min
+            y1_ = y1[index_log_non_zero:]
+            y2_ = y2[index_log_non_zero:]
+            y3_ = y3[index_log_non_zero:]
 
-                    else: # Postive and low sigma_eff
-                        limits[i] = arg_min
+            # Difference
+            log_diff = np.abs(np.log10(y2_)-np.log10(y1_))
 
-            limits = limits.astype('int')
+            # Minimum
+            min_indices, _ = find_peaks(-log_diff)
+            # print(min_indices)
 
-            compound = np.ones(len(self.log_mu4pdf))
+            min_diff_index_loc = min_indices[0]
+            min_diff_index = index_log_non_zero + min_diff_index_loc
 
-            # Set the curves together into one single array assert continuity
-            if ncuts > 0:
-                if ncuts == 1:
-                    # high neg
-                    compound[0:limits[0]+1] = curves['curve_1'][0:limits[0]+1] \
-                  / curves['curve_1'][limits[0]] * curves['curve_2'][limits[0]]
+            compound = np.concatenate(
+                (y1[:min_diff_index]/y1[min_diff_index]*y2[min_diff_index], y2[min_diff_index:]))
 
-                    compound[limits[0]:] = curves['curve_2'][limits[0]:]
-                else:
-                    for i in range(ncuts+1):
-                        if i == 0:
-                            compound[0:limits[0]+1] = curves['curve_1'][0:limits[0]+1]
-                        elif i == 1:
-                            compound[limits[0]:limits[1]+1] = compound[limits[0]] \
-                            / curves['curve_2'][limits[0]] \
-                            * curves['curve_2'][limits[0]:limits[1]+1]
-                        else:
-                            compound[limits[1]:] = compound[limits[1]] \
-                            / curves['curve_3'][limits[1]] \
-                            * curves['curve_3'][limits[1]:]
+            index_log_non_zero = np.where((y2 > 1e-8) & (y3 > 1e-8))[0][0]
+            index_log_non_zero2 = np.where((y2 > 1e-8) & (y3 > 1e-8))[0][-1]
+
+            y1_ = y1[index_log_non_zero:index_log_non_zero2]
+            y2_ = y2[index_log_non_zero:index_log_non_zero2]
+            y3_ = y3[index_log_non_zero:index_log_non_zero2]
+
+            # find first cut
+            max_y2_index = np.argmax(y2_)
+            log_diff_right = np.abs(
+                np.log10(y2_[max_y2_index:]) - np.log10(y3_[max_y2_index:]))
+
+            # Minimum
+            min_indices, _ = find_peaks(-log_diff_right)
+
+            max_y2 = np.max(y2_)
+
+            min_log_diff_index_local = min_indices[-1]
+            if max_y2 / y3_[min_log_diff_index_local + max_y2_index] > 1e2:
+                min_log_diff_index_local = min_indices[-2]
+
+            min_log_diff_index = max_y2_index + min_log_diff_index_local + index_log_non_zero
+
+            # Concatenate curves
+            compound = np.concatenate(
+                (compound[:min_log_diff_index], y3[min_log_diff_index:] /
+                 y3[min_log_diff_index]*y2[min_log_diff_index]))
+
+        if self.mass_regime == 'high' and self.parity == -1:
+            if len(self.curves) > 1:
+                y1 = self.curves['curve_1']
+                y2 = self.curves['curve_2']
+
+                min_log_diff_index = np.argwhere(y2 >= y1)
+
+                if len(min_log_diff_index) == 0:
+                    print('problem')
+                    y1 = y1/1.1
+                    min_log_diff_index = np.argwhere(y2 >= y1)
+
+                min_log_diff_index = min_log_diff_index[0][0]
+
+                # Concatenate curves
+                compound = np.concatenate(
+                    (y1[:min_log_diff_index], y2[min_log_diff_index:]))
+
+                if self.sigma_ratio >= 1:
+                    arg_right = np.argmin(abs(
+                        np.log10(y2[:np.argmax(y2)]) -
+                        np.log10(1.25*y2[min_log_diff_index])))
+                    x_right = 10**self.log_mu4pdf[arg_right]
+                    y_right = y2[arg_right]
+
+                    def powerlaw_to_fit(x, A, a, pl_params):
+                        return self.powerlaw(x, **pl_params) + \
+                            self.powerlaw(x, A, x_right, a)
+
+                    A_initial = 1.0
+                    a_initial = 1.0
+
+                    pl_params = {'A': self.model_params[0]['a'], 'x0': 10**2.4,
+                                 'a': self.model_params[0]['beta_a']}
+
+                    def objective(params):
+                        A, a = params
+                        return (powerlaw_to_fit(x_right, A, a, pl_params)
+                                - y_right)**2
+
+                    bounds = [(y_right/2, y_right),
+                              (pl_params['a']*1.5, pl_params['a']*3.5)]
+                    result = minimize(
+                        objective, [A_initial, a_initial], bounds=bounds)
+
+                    if result.success:
+                        print(result.x, x_right)
+                        y3 = y1 + \
+                            self.powerlaw(10**self.log_mu4pdf,
+                                          result.x[0], 10**2.4, result.x[1])
+                        min_log_diff_index = np.argwhere(y2 >= y3)
+                        if len(min_log_diff_index) > 0:
+                            min_log_diff_index = min_log_diff_index[0][0]
+                            compound = np.concatenate(
+                                (y3[:min_log_diff_index], y2[min_log_diff_index:]))
+
             else:
-                compound = curves['curve_1']
+                compound = self.curves['curve_1']
 
-        return compound, self.log_mu
+        if self.mass_regime == 'high' and self.parity == 1:
+            compound = self.curves['curve_1']
+
+        mask = compound >= 1e-4
+        return compound[mask], self.log_mu[mask]
 
     # Plots the pdf
     def plot(self, save_pic=False, path=None):
@@ -1729,13 +1855,13 @@ class microlenses(object):
         compound = self.get_pdf()[0]
 
         # Masks negligible values (probability < 10**(-5)).
-        masked_pdf = ma.masked_where(compound<1e-5, compound, copy=True)
-        masked_mu = ma.masked_where(compound<1e-5, self.log_mu, copy=True)
+        masked_pdf = ma.masked_where(compound < 1e-5, compound, copy=True)
+        masked_mu = ma.masked_where(compound < 1e-5, self.log_mu, copy=True)
         masked_mu = 10**masked_mu
 
         # Set the plot parameters and do the plotting.s
         with plt.rc_context({"xtick.major.pad": 4}):
-            fig, ax = plt.subplots(figsize=(10,6))
+            fig, ax = plt.subplots(figsize=(10, 6))
 
             cmap = matplotlib.cm.get_cmap('plasma')
 
@@ -1753,17 +1879,17 @@ class microlenses(object):
             ax.set_xlabel(r'$\mu$', fontsize=18)
             ax.set_ylabel(r'pdf$(\log_{10}(\mu))$', fontsize=18)
             ax.tick_params(which='major', length=4, labelsize=12,
-                                direction="in")
+                           direction="in")
             ax.tick_params(which='minor', length=2, labelsize=12,
-                direction="in")
+                           direction="in")
 
             y_minor = mpl.ticker.LogLocator(base=10.0,
-                                subs=np.arange(1.0, 10.0)*0.1, numticks=10)
+                                            subs=np.arange(1.0, 10.0)*0.1, numticks=10)
             ax.yaxis.set_minor_locator(y_minor)
             ax.yaxis.set_minor_formatter(mpl.ticker.NullFormatter())
 
             x_minor = mpl.ticker.LogLocator(base=10.0,
-                                subs=np.arange(1.0, 10.0)*0.1, numticks=10)
+                                            subs=np.arange(1.0, 10.0)*0.1, numticks=10)
             ax.xaxis.set_minor_locator(x_minor)
             ax.xaxis.set_minor_formatter(mpl.ticker.NullFormatter())
 
@@ -1776,11 +1902,8 @@ class microlenses(object):
                 plt.savefig(path+'magnification_pdf.pdf',
                             dpi=300)
 
-
             # Displays the image.
             plt.show()
-
-
 
     def save_data(self, path=None, extension='txt'):
         """
@@ -1802,8 +1925,7 @@ class microlenses(object):
 
         # Set the path
         if path is None:
-                path = os.getcwd() + '/'
-
+            path = os.getcwd() + '/'
 
         pdf, log_mu = self.get_pdf()
 
@@ -1828,17 +1950,18 @@ class microlenses(object):
                 dset = f.create_dataset("log10(mu)", (len(self.log_mu),))
                 dset[:] = self.log_mu
 
+
 # If runned by terminal equals True and this part of the code gets to run.
 if __name__ == "__main__":
 
     # Get the values trhough terminal. Help specified.
     parser = argparse.ArgumentParser(
-                    description='''Given a set of parameters regarding an
+        description='''Given a set of parameters regarding an
                     extragalactic microlensing scheme, this program
                     computes the probability of magnification in a given
                     range.''',
-                    prog='M-SMiLe.py',
-                    epilog = 'Contact: palencia@ifca.unican.es / jpalenciasainz@gmail.com')
+        prog='M-SMiLe.py',
+        epilog='Contact: palencia@ifca.unican.es / jpalenciasainz@gmail.com')
 
     # Mandatory parameters
     parser.add_argument('mu_t', metavar='mu_t', type=float,
@@ -1964,5 +2087,3 @@ microlens.plot(save_pic=True)
 pdf, log_mu = microlens.get_pdf()
 
 """
-
-

@@ -1708,7 +1708,6 @@ class microlenses(object):
 
             # Minimum
             min_indices, _ = find_peaks(-log_diff)
-            # print(min_indices)
 
             min_diff_index = min_indices[-1]
 
@@ -1732,7 +1731,6 @@ class microlenses(object):
 
             # Minimum
             min_indices, _ = find_peaks(-log_diff)
-            # print(min_indices)
 
             min_diff_index_loc = min_indices[0]
             min_diff_index = index_log_non_zero + min_diff_index_loc
@@ -1776,7 +1774,6 @@ class microlenses(object):
                 min_log_diff_index = np.argwhere(y2 >= y1)
 
                 if len(min_log_diff_index) == 0:
-                    print('problem')
                     y1 = y1/1.1
                     min_log_diff_index = np.argwhere(y2 >= y1)
 
@@ -1814,7 +1811,6 @@ class microlenses(object):
                         objective, [A_initial, a_initial], bounds=bounds)
 
                     if result.success:
-                        print(result.x, x_right)
                         y3 = y1 + \
                             self.powerlaw(10**self.log_mu4pdf,
                                           result.x[0], 10**2.4, result.x[1])

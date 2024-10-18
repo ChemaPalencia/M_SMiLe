@@ -54,6 +54,7 @@ from scipy.signal import find_peaks
 from scipy.optimize import minimize
 from scipy.signal import savgol_filter
 from astropy.cosmology import z_at_value
+from scipy.interpolate import CubicSpline
 from astropy.cosmology import FlatLambdaCDM
 from matplotlib.ticker import MultipleLocator, FormatStrFormatter, MaxNLocator
 
@@ -1463,7 +1464,8 @@ class microlenses(object):
                 pars_val_mu_C = {'A': 5336.83523, 'x0': 1, 'a': -0.16549351}
                 pars_err_mu_C = {'A': 400, 'x0': 0, 'a': 0.03}
 
-                pars_val_sigma_C = {'A': 0.332466, 'x0': 1, 'a': 0.2528516}
+                # pars_val_sigma_C = {'A': 0.332466, 'x0': 1, 'a': 0.2528516} old
+                pars_val_sigma_C = {'A': 0.225, 'x0': 1, 'a': 0.2628516}
                 pars_err_sigma_C = {'A': 0.011, 'x0': 0, 'a': 0.013}
 
                 model3_params = {'c': 0,
@@ -1626,9 +1628,9 @@ class microlenses(object):
                 pars_err_sigma_C = {'A': 0.0019, 'mu': 0.05, 'sigma': 0.009,
                                     'B': 0.004, 'b': 0.009}
 
-                model2_params = {'A': self.threeSmoothPowerlaw(x,
-                                                               **pars_val_A)*np.heaviside(15-x, 0)*np.heaviside(x-1, 0)
-                                 + self.powerlaw(x, 0.79, 1, 0.2391465751775469)*np.heaviside(1-x, 1),
+                model2_params = {'A': (self.threeSmoothPowerlaw(x,
+                                                                **pars_val_A)*np.heaviside(x-1, 0)
+                                 + self.powerlaw(x, 0.79, 1, 0.2391465751775469)*np.heaviside(1-x, 1))*np.heaviside(15-x, 0),
                                  'mu_A': self.fourBrokenPowerlaw(x,
                                                                  **pars_val_mu_A)*np.heaviside(x-1, 0)
                                  + self.powerlaw(x, 651, 1, -0.10902422577139648)*np.heaviside(1-x, 1),
@@ -1636,12 +1638,16 @@ class microlenses(object):
                                                                       **pars_val_sigma_A)*np.heaviside(x-1, 0)
                                  + self.powerlaw(x, 0.3692, 1, 0.0) *
                                  np.heaviside(1-x, 1),
-                                 'B': self.lognormals(x,
-                                                      **pars_val_B)*np.heaviside(x-1, 0)
-                                 + self.powerlaw(x, 0.17, 1, 0.9215198558143352)*np.heaviside(1-x, 1),
+                                 'B': (self.lognormals(x,
+                                                       **pars_val_B)*np.heaviside(x-1, 0)
+                                       + self.powerlaw(x, 0.17, 1, 0.9215198558143352)*np.heaviside(1-x, 1)),  # *np.heaviside(55-x, 0),
                                  'mu_B': self.fourBrokenPowerlaw(x,
                                                                  **pars_val_mu_B)*np.heaviside(x-1, 0)
-                                 + self.powerlaw(x, 2452, 1, -0.6615682731747226)*np.heaviside(1-x, 1),
+                                 + self.powerlaw(x, 2452, 1, -0.6615682731747226) *
+                                 np.heaviside(1-x, 1)+10 *
+                                 np.heaviside(x-35, 1) + 5 * \
+                                 np.heaviside(x-55, 1) + 5 * \
+                                 np.heaviside(x-100, 1),
                                  'sigma_B': self.threeBrokenPowerlawlognormal(x,
                                                                               **pars_val_sigma_B)*np.heaviside(x-1, 0)
                                  + self.powerlaw(x, 0.2728, 1, 0.0) *
@@ -1826,8 +1832,57 @@ class microlenses(object):
         if self.mass_regime == 'high' and self.parity == 1:
             compound = self.curves['curve_1']
 
-        mask = compound >= 1e-4
-        return compound[mask], self.log_mu[mask]
+        for ii, floor in enumerate([1e-4, 1e-5, 1e-6, 1e-7, 1e-8]):
+            j = 1
+            if ii > 2:
+                j = 2
+            mask = compound >= floor
+            pdf_masked = compound[mask]
+
+            args_intersec = [np.where(compound >= floor)[0][0],
+                             np.where(compound >= floor)[0][-1]]
+
+            if args_intersec[-1] < len(compound)-1:
+                x_to_extrapolate1 = self.log_mu[args_intersec[-1] -
+                                                800*j+1:args_intersec[-1]+1]
+                y_to_extrapolate1 = np.log10(
+                    compound[args_intersec[-1]-800*j+1:args_intersec[-1]+1])
+                model1 = CubicSpline(x_to_extrapolate1, y_to_extrapolate1)
+                x_new1 = self.log_mu[args_intersec[-1]+1:]
+                y_new1 = 10**model1(x_new1)
+                if y_new1[-1] > y_new1[-2]:
+                    y_new1[np.argmin(y_new1)-500:] = np.nan
+            else:
+                y_new1 = None
+
+            if args_intersec[0] > 0:
+                x_to_extrapolate2 = self.log_mu[args_intersec[0]:
+                                                args_intersec[0]+800*j]
+                y_to_extrapolate2 = np.log10(
+                    compound[args_intersec[0]:args_intersec[0]+800*j])
+                model2 = CubicSpline(x_to_extrapolate2, y_to_extrapolate2)
+                x_new2 = self.log_mu[:args_intersec[0]]
+                y_new2 = 10**model2(x_new2)
+                if y_new2[-1] > y_new2[-2]:
+                    y_new2[:np.argmin(y_new2)+500] = np.nan
+            else:
+                y_new2 = None
+
+            if y_new1 is None and y_new2 is None:
+                compound = compound
+            elif y_new1 is None and y_new2 is not None:
+                compound = np.concatenate((y_new2, pdf_masked))
+                del y_new2, x_new2
+            elif y_new1 is not None and y_new2 is None:
+                compound = np.concatenate((pdf_masked, y_new1))
+                del y_new1, x_new1
+            else:
+                compound = np.concatenate((y_new2, pdf_masked, y_new1))
+                del y_new2, y_new1, x_new2, x_new1
+
+        mask = compound >= 1e-7
+        compound[~mask] = np.nan
+        return compound, self.log_mu
 
     # Plots the pdf
     def plot(self, save_pic=False, path=None):
@@ -1848,16 +1903,42 @@ class microlenses(object):
         """
 
         # Get the pdf based on the mass regime.
-        compound = self.get_pdf()[0]
-
-        # Masks negligible values (probability < 10**(-5)).
-        masked_pdf = ma.masked_where(compound < 1e-5, compound, copy=True)
-        masked_mu = ma.masked_where(compound < 1e-5, self.log_mu, copy=True)
-        masked_mu = 10**masked_mu
+        compound, log_mu = self.get_pdf()
 
         # Set the plot parameters and do the plotting.s
-        with plt.rc_context({"xtick.major.pad": 4}):
-            fig, ax = plt.subplots(figsize=(10, 6))
+        style_params = {
+            'figure.figsize': (8, 8),
+            'xtick.major.size': 15,
+            'xtick.major.width': 2,
+            'xtick.minor.size': 10,
+            'xtick.minor.width': 1,
+            'xtick.direction': 'in',
+            'xtick.top': True,
+            'ytick.major.size': 15,
+            'ytick.major.width': 2,
+            'ytick.minor.size': 10,
+            'ytick.minor.width': 1,
+            'ytick.direction': 'in',
+            'ytick.right': True,
+            'xtick.labelsize': 25,
+            'ytick.labelsize': 25,
+            'xtick.major.pad': 9,
+            'legend.fontsize': 30,
+            'legend.title_fontsize': 30,
+            'axes.titlesize': 30,
+            'axes.labelsize': 40,
+            'axes.linewidth': 2.5,
+            'grid.linewidth': 1,
+            'lines.linewidth': 3,
+            'lines.solid_capstyle': 'round',
+            'font.family': 'serif',
+            'text.usetex': True,
+            'font.size': 28,
+            'font.serif': 'Palatino',
+            'legend.frameon': False,
+        }
+        with plt.rc_context(style_params):
+            fig, ax = plt.subplots(figsize=(10, 7), layout='constrained')
 
             cmap = matplotlib.cm.get_cmap('plasma')
 
@@ -1868,28 +1949,15 @@ class microlenses(object):
                 ls = '-'
                 color = cmap(0.8)
 
-            ax.plot(masked_mu, masked_pdf, label=r'pdf$(\log_{10}(\mu))$',
+            ax.plot(log_mu, compound, label=f'{self.sigma_ratio:.2f}',
                     lw=3, ls=ls, color=color)
+
+            ax.set_xlim(left=0, right=5)
+            ax.set_ylim(bottom=1e-7, top=np.nanmax(compound)*7)
+
+            ax.set_ylabel(r'PDF$\left((\log_{10}\left(\mu\right)\right)$')
+            ax.set_xlabel(r'$\log_{10}\left(\mu\right)$')
             ax.set_yscale('log')
-            ax.set_xscale('log')
-            ax.set_xlabel(r'$\mu$', fontsize=18)
-            ax.set_ylabel(r'pdf$(\log_{10}(\mu))$', fontsize=18)
-            ax.tick_params(which='major', length=4, labelsize=12,
-                           direction="in")
-            ax.tick_params(which='minor', length=2, labelsize=12,
-                           direction="in")
-
-            y_minor = mpl.ticker.LogLocator(base=10.0,
-                                            subs=np.arange(1.0, 10.0)*0.1, numticks=10)
-            ax.yaxis.set_minor_locator(y_minor)
-            ax.yaxis.set_minor_formatter(mpl.ticker.NullFormatter())
-
-            x_minor = mpl.ticker.LogLocator(base=10.0,
-                                            subs=np.arange(1.0, 10.0)*0.1, numticks=10)
-            ax.xaxis.set_minor_locator(x_minor)
-            ax.xaxis.set_minor_formatter(mpl.ticker.NullFormatter())
-
-            plt.tight_layout()
 
             # Saves the image.
             if save_pic:
@@ -1929,22 +1997,22 @@ class microlenses(object):
             # Write a row pdf and log mu space-separated per mu.
             with open(path+'magnification_pdf.txt', 'w') as f:
                 f.write('pdf(log10(mu)) log10(mu)\n')
-                for i, pdf in np.ndenumerate(pdf):
-                    f.write(str(pdf) + ' ' + str(self.log_mu[i]) + '\n')
+                for i, pdf_i in np.ndenumerate(pdf):
+                    f.write(str(pdf_i) + ' ' + str(log_mu[i]) + '\n')
 
         elif extension == 'fits':
             # Write a table with pdf and log mu.
             t = Table()
-            t['(log10(mu))'] = pdf
-            t['log10(mu)'] = self.log_mu
+            t['pdf(log10(mu))'] = pdf
+            t['log10(mu)'] = log_mu
             t.write(path+'magnification_pdf.fits', overwrite=True)
 
         elif extension == 'h5':
             with h5py.File(path+'magnification_pdf.hdf5', 'w') as f:
                 dset = f.create_dataset("pdf(log10(mu))", (len(pdf),))
                 dset[:] = pdf
-                dset = f.create_dataset("log10(mu)", (len(self.log_mu),))
-                dset[:] = self.log_mu
+                dset = f.create_dataset("log10(mu)", (len(log_mu),))
+                dset[:] = log_mu
 
 
 # If runned by terminal equals True and this part of the code gets to run.

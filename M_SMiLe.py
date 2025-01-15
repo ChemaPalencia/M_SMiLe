@@ -1113,8 +1113,7 @@ class microlenses(object):
                              np.argmin(abs(10**self.log_mu4pdf
                                            - self.mu2*abs(1e3/self.mu_m)))]
 
-        self.log_mu4pdf = self.log_mu4pdf[self.limits_logmu[0]
-            : self.limits_logmu[1]]
+        self.log_mu4pdf = self.log_mu4pdf[self.limits_logmu[0]: self.limits_logmu[1]]
 
         # Values unnormalized
         self.log_mu = self.log_mu4pdf + np.log10(abs(self.mu_m)/1000)
@@ -1161,7 +1160,8 @@ class microlenses(object):
                 pars_err_alpha_B = {'A': 0.602, 'x0': 0, 'a': 0.07}
 
                 model1_params = {'A': self.powerlaw(x,
-                                                    **pars_val_A),  # *np.heaviside(0.1-x, 0),
+                                                    **pars_val_A)*np.heaviside(-0.05+x, 0)+x**0.8*self.powerlaw(abs(x-0.05),
+                                                                                                                **pars_val_A)*np.heaviside(+0.05-x, 1)*np.heaviside(-0.005+x, 0),
                                  'mu_A': self.powerlaw(x,
                                                        **pars_val_mu_A),
                                  'sigma_A': self.powerlaw(x,
@@ -1171,7 +1171,7 @@ class microlenses(object):
                                  'mu_B': self.brokenPowerlawSmooth(x,
                                                                    **pars_val_mu_B),
                                  'sigma_B': self.powerlaw(x,
-                                                          **pars_val_sigma_B),
+                                                          **pars_val_sigma_B)+2e-2*np.heaviside(0.1-x, 0),
                                  'alpha_B': self.powerlaw(x,
                                                           **pars_val_alpha_B)}
 
@@ -1333,16 +1333,48 @@ class microlenses(object):
                                  'sigma_B': self.fourBrokenPowerlaw(x,
                                                                     **pars_val_sigma_B)*np.heaviside(x-1, 0)
                                  + self.powerlaw(x, 0.3319, 1, 0.16036329929555113)*np.heaviside(1-x, 1),
-                                 'alpha_B': self.twoConstMinusLognormal(x,
-                                                                        **pars_val_alpha_B)*np.heaviside(x-1, 0)
-                                 + self.powerlaw(x, 2.31, 1, -0.4005601911082159)*np.heaviside(1-x, 1)}
+                                 'alpha_B': (self.twoConstMinusLognormal(x,
+                                                                         **pars_val_alpha_B)*np.heaviside(x-1, 0)*np.heaviside(-x+66.5, 0)
+                                             + self.powerlaw(x, 2.31, 1, -0.4005601911082159) *
+                                             np.heaviside(1-x, 1)
+                                             + self.twoConstMinusLognormal(2*66.5-x, **pars_val_alpha_B)*np.heaviside(
+                                     x-66.5, 0))
+                                 }
+                if x > 125:
+                    model1_params['alpha_B'] = 0
                 self.model_params = [model1_params]
+
+                if x >= 150:
+                    pars_val_B = {'B': 1.2500202, 'break2': 17.5662,
+                                  'exp3': 4.904496, 'exp4': 0.02986548,
+                                  'delta2': 0.223740118, 'C': 0.741360,
+                                  'A': 0.608494, 'break1': 5.717417,
+                                  'exp1': 1.817844, 'exp2': 9.9999,
+                                  'delta1': 0.127479}
+                    model1_params['B'] = self.twoBrokenPowerlawSmooth(x,
+                                                                      **pars_val_B)*np.heaviside(x-2.5, 1)
+
+                    pars_val_sigma_B_ = {'A': 0.183939519, 'mu': 4.61129583,
+                                         'sigma': 0.2204833636, 'B': 0.14797318,
+                                         'b': -0.0629659035}
+
+                    model1_params['sigma_B'] = self.lognormal2powerlaw(x,
+                                                                       **pars_val_sigma_B_)
+                if (x > 66.5) and (x < 150):
+                    pars_val_sigma_B_ = {'A': self.fourBrokenPowerlaw(66.5,
+                                                                      **pars_val_sigma_B)*np.heaviside(66.5-1, 0),
+                                         'x0': 66.5,
+                                         'a': -0.438}
+
+                    model1_params['sigma_B'] = self.powerlaw(x,
+                                                             **pars_val_sigma_B_)
 
                 # Model functions
                 def model1(x, A, mu_A, sigma_A, alpha_A,
                            B, mu_B, sigma_B, alpha_B, **kwargs):
 
                     ln_a = microlenses.lognormal(x, A, mu_A, sigma_A, alpha_A)
+
                     ln_b = microlenses.lognormal(x, B, mu_B, sigma_B, alpha_B)
 
                     return ln_a + ln_b
@@ -1630,7 +1662,7 @@ class microlenses(object):
 
                 model2_params = {'A': (self.threeSmoothPowerlaw(x,
                                                                 **pars_val_A)*np.heaviside(x-1, 0)
-                                 + self.powerlaw(x, 0.79, 1, 0.2391465751775469)*np.heaviside(1-x, 1))*np.heaviside(15-x, 0),
+                                       + self.powerlaw(x, 0.79, 1, 0.2391465751775469)*np.heaviside(1-x, 1))*np.heaviside(15-x, 0),
                                  'mu_A': self.fourBrokenPowerlaw(x,
                                                                  **pars_val_mu_A)*np.heaviside(x-1, 0)
                                  + self.powerlaw(x, 651, 1, -0.10902422577139648)*np.heaviside(1-x, 1),
@@ -1640,7 +1672,7 @@ class microlenses(object):
                                  np.heaviside(1-x, 1),
                                  'B': (self.lognormals(x,
                                                        **pars_val_B)*np.heaviside(x-1, 0)
-                                       + self.powerlaw(x, 0.17, 1, 0.9215198558143352)*np.heaviside(1-x, 1)),  # *np.heaviside(55-x, 0),
+                                       + self.powerlaw(x, 0.17, 1, 0.9215198558143352)*np.heaviside(1-x, 1))*np.heaviside(40-x, 0),  # *np.heaviside(55-x, 0),
                                  'mu_B': self.fourBrokenPowerlaw(x,
                                                                  **pars_val_mu_B)*np.heaviside(x-1, 0)
                                  + self.powerlaw(x, 2452, 1, -0.6615682731747226) *
@@ -1660,6 +1692,16 @@ class microlenses(object):
                                                                     **pars_val_sigma_C),
                                  }
 
+                if x >= 125:
+                    pars_val_mu_C = {'A': 737.963490, 'break0': 1.000015,
+                                     'break1': 2.23622845, 'break2': 4.200702,
+                                     'break3': 17.4261488, 'exp0': -1.609319,
+                                     'exp1': -0.138034, 'exp2': 1.3166448,
+                                     'exp3': -1.397220, 'exp4': -0.18866907,
+                                     'delta1': 0.2407108, 'delta2': 0.991359}
+                    model2_params['mu_C'] = self.powerlaw23BbrokenPowerlawSmooth(x,
+                                                                                 **pars_val_mu_C)*np.heaviside(x-1, 0)
+
                 self.model_params = [model1_params, model2_params]
 
                 # Model functions
@@ -1676,7 +1718,10 @@ class microlenses(object):
                     ln_b[np.argwhere(np.isnan(ln_b))] = 0
                     ln_c[np.argwhere(np.isnan(ln_c))] = 0
 
-                    return ln_a + ln_b + ln_c
+                    ln_a = ln_a*np.heaviside(80-self.sigma_ratio, 0)
+                    ln_b = ln_b*np.heaviside(80-self.sigma_ratio, 0)
+
+                    return ln_b + ln_a + ln_c
 
                 self.models = [model1, model2]
 
@@ -1695,82 +1740,100 @@ class microlenses(object):
             y2 = self.curves['curve_2']
             y3 = self.curves['curve_3']
 
-            # find first cut
-            max_y1_index = np.argmax(y1)
-            log_diff_right = np.abs(
-                np.log10(y1[max_y1_index:]) - np.log10(y2[max_y1_index:]))
+            # phuse right and mid first
+            argmax = np.log10(self.model_params[-1]['mu_C'])+1
+            argmin = np.log10(self.model_params[-1]['mu_C'])-1
 
-            # Find local index where differnce is minimum
-            min_log_diff_index_local = np.argmin(log_diff_right)
+            limit_left = np.argmin(abs(self.log_mu4pdf-argmin))
+            limit_right = np.argmin(abs(self.log_mu4pdf-argmax))
 
-            min_log_diff_index = max_y1_index + min_log_diff_index_local
+            y2_ = y2/y3[np.argmax(y3)]
+            y3_ = y3/y3[np.argmax(y3)]
 
-            # Concatenate curves
-            compound1 = np.concatenate(
-                (y1[:min_log_diff_index], y2[min_log_diff_index:]))
+            y2_ = y2_[limit_left:limit_right]
+            y3_ = y3_[limit_left:limit_right]
 
-            # Difference
-            log_diff = np.abs(np.log10(y2)-np.log10(y3))/np.abs(np.log10(y2))
+            y2_[np.where(y2_ < 1e-8)] = 1e-8
+            y3_[np.where(y3_ < 1e-8)] = 1e-8
 
-            # Minimum
-            min_indices, _ = find_peaks(-log_diff)
+            min_indices, _ = find_peaks(-np.abs(np.log10(y2_)-np.log10(y3_)))
 
-            min_diff_index = min_indices[-1]
-
+            transition_index = limit_left + min_indices[-1]
             compound = np.concatenate(
-                (compound1[:min_diff_index], y3[min_diff_index:] /
-                 y3[min_diff_index]*y2[min_diff_index]))
+                (y2[:transition_index]/y2[transition_index]*y3[transition_index],
+                 y3[transition_index:]))
+
+            # left and remaining
+            y2 = compound
+            argmax = np.log10(self.model_params[-1]['mu_C'])+.5
+            argmin = np.log10(self.model_params[0]['mu_B'])
+
+            limit_left = np.argmin(abs(self.log_mu4pdf-argmin))
+            limit_right = np.argmin(abs(self.log_mu4pdf-argmax))
+
+            y1_ = y1/y2[np.argmax(y1)]
+            y2_ = y2/y2[np.argmax(y1)]
+
+            y1_ = y1_[limit_left:limit_right]
+            y2_ = y2_[limit_left:limit_right]
+
+            y1_[np.where(y1_ < 1e-8)] = 1e-8
+            y2_[np.where(y2_ < 1e-8)] = 1e-8
+
+            min_indices, _ = find_peaks(-np.abs(np.log10(y1_)-np.log10(y2_)))
+
+            transition_index = limit_left + min_indices[-1]
+            compound = np.concatenate(
+                (y1[:transition_index]/y1[transition_index]*y2[transition_index],
+                 y2[transition_index:]))
 
         if self.mass_regime == 'low' and self.parity == -1:
             y1 = self.curves['curve_1']
             y2 = self.curves['curve_2']
             y3 = self.curves['curve_3']
 
-            index_log_non_zero = np.where(y2 > 1e-8)[0][0]
+            # phuse right and mid first
+            argmax = np.argmax(y2)
 
-            y1_ = y1[index_log_non_zero:]
-            y2_ = y2[index_log_non_zero:]
-            y3_ = y3[index_log_non_zero:]
+            y2_ = y2/y2[argmax]
+            y3_ = y3/y2[argmax]
 
-            # Difference
-            log_diff = np.abs(np.log10(y2_)-np.log10(y1_))
+            limit_left = argmax
+            limit_right = np.argmin(abs(
+                self.log_mu4pdf-np.log10(self.model_params[-1]['mu_C'])))
 
-            # Minimum
-            min_indices, _ = find_peaks(-log_diff)
+            x_ = self.log_mu4pdf[limit_left:limit_right]
+            y2_ = y2_[limit_left:limit_right]
+            y3_ = y3_[limit_left:limit_right]
+            y2_[np.where(y2_ < 1e-8)] = 1e-8
+            y3_[np.where(y3_ < 1e-8)] = 1e-8
 
-            min_diff_index_loc = min_indices[0]
-            min_diff_index = index_log_non_zero + min_diff_index_loc
-
+            min_indices, _ = find_peaks(-np.abs(np.log10(y2_)-np.log10(y3_)))
+            transition_index = argmax + min_indices[-1]
             compound = np.concatenate(
-                (y1[:min_diff_index]/y1[min_diff_index]*y2[min_diff_index], y2[min_diff_index:]))
+                (y2[:transition_index]/y2[transition_index]*y3[transition_index],
+                 y3[transition_index:]))
 
-            index_log_non_zero = np.where((y2 > 1e-8) & (y3 > 1e-8))[0][0]
-            index_log_non_zero2 = np.where((y2 > 1e-8) & (y3 > 1e-8))[0][-1]
+            y1 = self.curves['curve_1']
+            y2 = compound
 
-            y1_ = y1[index_log_non_zero:index_log_non_zero2]
-            y2_ = y2[index_log_non_zero:index_log_non_zero2]
-            y3_ = y3[index_log_non_zero:index_log_non_zero2]
+            y1_ = y1/y2[argmax]
+            y2_ = y2/y2[argmax]
 
-            # find first cut
-            max_y2_index = np.argmax(y2_)
-            log_diff_right = np.abs(
-                np.log10(y2_[max_y2_index:]) - np.log10(y3_[max_y2_index:]))
+            limit_right = argmax
+            limit_left = np.argmin(abs(
+                self.log_mu4pdf-np.log10(self.model_params[0]['mu_A'])))
 
-            # Minimum
-            min_indices, _ = find_peaks(-log_diff_right)
+            x_ = self.log_mu4pdf[limit_left:limit_right]
+            y1_ = y1_[limit_left:limit_right]
+            y2_ = y2_[limit_left:limit_right]
+            y1_[np.where(y2_ < 1e-8)] = 1e-8
+            y2_[np.where(y1_ < 1e-8)] = 1e-8
 
-            max_y2 = np.max(y2_)
-
-            min_log_diff_index_local = min_indices[-1]
-            if max_y2 / y3_[min_log_diff_index_local + max_y2_index] > 1e2:
-                min_log_diff_index_local = min_indices[-2]
-
-            min_log_diff_index = max_y2_index + min_log_diff_index_local + index_log_non_zero
-
-            # Concatenate curves
+            min_indices, _ = find_peaks(-np.abs(np.log10(y2_)-np.log10(y1_)))
+            transition_index = limit_left + min_indices[-1]
             compound = np.concatenate(
-                (compound[:min_log_diff_index], y3[min_log_diff_index:] /
-                 y3[min_log_diff_index]*y2[min_log_diff_index]))
+                (y1[:transition_index], y2[transition_index:]))
 
         if self.mass_regime == 'high' and self.parity == -1:
             if len(self.curves) > 1:
@@ -1832,53 +1895,53 @@ class microlenses(object):
         if self.mass_regime == 'high' and self.parity == 1:
             compound = self.curves['curve_1']
 
-        for ii, floor in enumerate([1e-4, 1e-5, 1e-6, 1e-7, 1e-8]):
-            j = 1
-            if ii > 2:
-                j = 2
-            mask = compound >= floor
-            pdf_masked = compound[mask]
+        # for ii, floor in enumerate([1e-4, 1e-5, 1e-6, 1e-7, 1e-8]):
+        #     j = 1
+        #     if ii > 2:
+        #         j = 2
+        #     mask = compound >= floor
+        #     pdf_masked = compound[mask]
 
-            args_intersec = [np.where(compound >= floor)[0][0],
-                             np.where(compound >= floor)[0][-1]]
+        #     args_intersec = [np.where(compound >= floor)[0][0],
+        #                      np.where(compound >= floor)[0][-1]]
 
-            if args_intersec[-1] < len(compound)-1:
-                x_to_extrapolate1 = self.log_mu[args_intersec[-1] -
-                                                800*j+1:args_intersec[-1]+1]
-                y_to_extrapolate1 = np.log10(
-                    compound[args_intersec[-1]-800*j+1:args_intersec[-1]+1])
-                model1 = CubicSpline(x_to_extrapolate1, y_to_extrapolate1)
-                x_new1 = self.log_mu[args_intersec[-1]+1:]
-                y_new1 = 10**model1(x_new1)
-                if y_new1[-1] > y_new1[-2]:
-                    y_new1[np.argmin(y_new1)-500:] = np.nan
-            else:
-                y_new1 = None
+        #     if args_intersec[-1] < len(compound)-1:
+        #         x_to_extrapolate1 = self.log_mu[args_intersec[-1] -
+        #                                         800*j+1:args_intersec[-1]+1]
+        #         y_to_extrapolate1 = np.log10(
+        #             compound[args_intersec[-1]-800*j+1:args_intersec[-1]+1])
+        #         model1 = CubicSpline(x_to_extrapolate1, y_to_extrapolate1)
+        #         x_new1 = self.log_mu[args_intersec[-1]+1:]
+        #         y_new1 = 10**model1(x_new1)
+        #         if y_new1[-1] > y_new1[-2]:
+        #             y_new1[np.argmin(y_new1)-500:] = np.nan
+        #     else:
+        #         y_new1 = None
 
-            if args_intersec[0] > 0:
-                x_to_extrapolate2 = self.log_mu[args_intersec[0]:
-                                                args_intersec[0]+800*j]
-                y_to_extrapolate2 = np.log10(
-                    compound[args_intersec[0]:args_intersec[0]+800*j])
-                model2 = CubicSpline(x_to_extrapolate2, y_to_extrapolate2)
-                x_new2 = self.log_mu[:args_intersec[0]]
-                y_new2 = 10**model2(x_new2)
-                if y_new2[-1] > y_new2[-2]:
-                    y_new2[:np.argmin(y_new2)+500] = np.nan
-            else:
-                y_new2 = None
+        #     if args_intersec[0] > 0:
+        #         x_to_extrapolate2 = self.log_mu[args_intersec[0]:
+        #                                         args_intersec[0]+800*j]
+        #         y_to_extrapolate2 = np.log10(
+        #             compound[args_intersec[0]:args_intersec[0]+800*j])
+        #         model2 = CubicSpline(x_to_extrapolate2, y_to_extrapolate2)
+        #         x_new2 = self.log_mu[:args_intersec[0]]
+        #         y_new2 = 10**model2(x_new2)
+        #         if y_new2[-1] > y_new2[-2]:
+        #             y_new2[:np.argmin(y_new2)+500] = np.nan
+        #     else:
+        #         y_new2 = None
 
-            if y_new1 is None and y_new2 is None:
-                compound = compound
-            elif y_new1 is None and y_new2 is not None:
-                compound = np.concatenate((y_new2, pdf_masked))
-                del y_new2, x_new2
-            elif y_new1 is not None and y_new2 is None:
-                compound = np.concatenate((pdf_masked, y_new1))
-                del y_new1, x_new1
-            else:
-                compound = np.concatenate((y_new2, pdf_masked, y_new1))
-                del y_new2, y_new1, x_new2, x_new1
+        #     if y_new1 is None and y_new2 is None:
+        #         compound = compound
+        #     elif y_new1 is None and y_new2 is not None:
+        #         compound = np.concatenate((y_new2, pdf_masked))
+        #         del y_new2, x_new2
+        #     elif y_new1 is not None and y_new2 is None:
+        #         compound = np.concatenate((pdf_masked, y_new1))
+        #         del y_new1, x_new1
+        #     else:
+        #         compound = np.concatenate((y_new2, pdf_masked, y_new1))
+        #         del y_new2, y_new1, x_new2, x_new1
 
         mask = compound >= 1e-7
         compound[~mask] = np.nan
